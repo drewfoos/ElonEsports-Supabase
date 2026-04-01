@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useRouter } from 'next/navigation'
 import {
@@ -9,7 +9,7 @@ import {
   loadEventPreview,
   confirmTournamentImport,
 } from '@/lib/actions/tournaments'
-import { getPlayers } from '@/lib/actions/players'
+import { getPlayers, createPlayer } from '@/lib/actions/players'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,14 +31,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import type { Player, ImportPreview, StartggEvent } from '@/lib/types'
@@ -51,35 +43,114 @@ interface ParticipantRow {
   id: string
   playerId: string
   playerLabel: string
-  placement: number
 }
 
 function generateRowId(): string {
   return Math.random().toString(36).slice(2, 10)
 }
 
+type BracketFormat = 'double' | 'single'
+
+/**
+ * Double-elimination bracket placement for a given 1-indexed position.
+ * 1st–4th are unique. After that, placements follow losers bracket tiers:
+ * [5,6]→5th, [7,8]→7th, [9–12]→9th, [13–16]→13th, [17–24]→17th, etc.
+ */
+function doubleElimPlacement(position: number): number {
+  if (position <= 4) return position
+  let tierStart = 5
+  let tierSize = 2
+  let pairsInSize = 0
+  for (;;) {
+    if (position < tierStart + tierSize) return tierStart
+    tierStart += tierSize
+    pairsInSize++
+    if (pairsInSize === 2) {
+      tierSize *= 2
+      pairsInSize = 0
+    }
+  }
+}
+
+/**
+ * Single-elimination bracket placement for a given 1-indexed position.
+ * 1st–2nd are unique. After that, placements group in powers of 2:
+ * [3,4]→3rd, [5–8]→5th, [9–16]→9th, [17–32]→17th, etc.
+ */
+function singleElimPlacement(position: number): number {
+  if (position <= 2) return position
+  let tierStart = 3
+  let tierSize = 2
+  for (;;) {
+    if (position < tierStart + tierSize) return tierStart
+    tierStart += tierSize
+    tierSize *= 2
+  }
+}
+
+function bracketPlacement(position: number, format: BracketFormat): number {
+  return format === 'single'
+    ? singleElimPlacement(position)
+    : doubleElimPlacement(position)
+}
+
 // ---------------------------------------------------------------------------
 // Player Picker — searchable command dropdown
 // ---------------------------------------------------------------------------
 
-function PlayerPicker({
+const PlayerPicker = memo(function PlayerPicker({
+  playerMap,
   players,
   value,
   onChange,
+  onCreatePlayer,
 }: {
+  playerMap: Map<string, Player>
   players: Player[]
   value: string
   onChange: (playerId: string, label: string) => void
+  onCreatePlayer?: (gamerTag: string) => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [creating, setCreating] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
-  const selectedPlayer = players.find((p) => p.id === value)
+  const selectedPlayer = playerMap.get(value)
 
-  const filtered = players.filter((p) =>
-    p.gamer_tag.toLowerCase().includes(search.toLowerCase())
+  const searchLower = search.toLowerCase()
+  const searchTrimmed = search.trim()
+
+  const filtered = useMemo(
+    () => search
+      ? players.filter((p) => p.gamer_tag.toLowerCase().includes(searchLower))
+      : players,
+    [players, search, searchLower]
   )
+
+  const exactMatch = useMemo(
+    () => !searchTrimmed || players.some((p) => p.gamer_tag.toLowerCase() === searchTrimmed.toLowerCase()),
+    [players, searchTrimmed]
+  )
+
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 32,
+    overscan: 10,
+  })
+
+  async function handleCreate() {
+    if (!searchTrimmed || !onCreatePlayer) return
+    setCreating(true)
+    try {
+      await onCreatePlayer(searchTrimmed)
+      setSearch('')
+    } finally {
+      setCreating(false)
+    }
+  }
 
   // Close on outside click
   useEffect(() => {
@@ -109,78 +180,262 @@ function PlayerPicker({
       </Button>
       {open && (
         <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
-          <Command shouldFilter={false}>
-            <CommandInput
-              placeholder="Search players..."
+          <div className="flex items-center border-b px-3">
+            <input
+              className="flex h-9 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              placeholder="Search or type new name..."
               value={search}
-              onValueChange={setSearch}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !exactMatch && searchTrimmed && onCreatePlayer) {
+                  e.preventDefault()
+                  handleCreate()
+                }
+              }}
+              autoFocus
             />
-            <CommandList>
-              <CommandEmpty>No players found.</CommandEmpty>
-              <CommandGroup>
-                {filtered.map((p) => (
-                  <CommandItem
-                    key={p.id}
-                    value={p.id}
-                    onSelect={() => {
-                      onChange(p.id, p.gamer_tag)
-                      setOpen(false)
-                      setSearch('')
-                    }}
-                  >
-                    {p.gamer_tag}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
+          </div>
+          {/* Create new player option */}
+          {searchTrimmed && !exactMatch && onCreatePlayer && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 border-b px-3 py-2 text-sm text-primary hover:bg-accent disabled:opacity-50"
+              onClick={handleCreate}
+              disabled={creating}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              {creating ? 'Creating...' : `Create "${searchTrimmed}"`}
+            </button>
+          )}
+          {filtered.length === 0 && (exactMatch || !onCreatePlayer) ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No players found.</p>
+          ) : filtered.length > 0 ? (
+            <div ref={listRef} className="max-h-[200px] overflow-auto">
+              <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+                {virtualizer.getVirtualItems().map((virtualRow) => {
+                  const p = filtered[virtualRow.index]
+                  return (
+                    <div
+                      key={p.id}
+                      className="absolute left-0 w-full cursor-pointer select-none px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                      style={{
+                        height: virtualRow.size,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                      onClick={() => {
+                        onChange(p.id, p.gamer_tag)
+                        setOpen(false)
+                        setSearch('')
+                      }}
+                    >
+                      {p.gamer_tag}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
   )
-}
+})
+
+// ---------------------------------------------------------------------------
+// Memoized participant row — prevents re-render of all rows when one changes
+// ---------------------------------------------------------------------------
+
+const ParticipantRowItem = memo(function ParticipantRowItem({
+  row,
+  placement,
+  isNewTier,
+  isDragging,
+  isDragOver,
+  playerMap,
+  players,
+  onUpdate,
+  onRemove,
+  onCreate,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+}: {
+  row: ParticipantRow
+  placement: number
+  isNewTier: boolean
+  isDragging: boolean
+  isDragOver: boolean
+  playerMap: Map<string, Player>
+  players: Player[]
+  onUpdate: (rowId: string, field: Partial<ParticipantRow>) => void
+  onRemove: (rowId: string) => void
+  onCreate: (rowId: string, gamerTag: string) => Promise<void>
+  onDragStart: () => void
+  onDragOver: (e: React.DragEvent) => void
+  onDragEnd: () => void
+}) {
+  const handleChange = useCallback(
+    (playerId: string, label: string) => onUpdate(row.id, { playerId, playerLabel: label }),
+    [onUpdate, row.id]
+  )
+
+  const handleCreate = useCallback(
+    (gamerTag: string) => onCreate(row.id, gamerTag),
+    [onCreate, row.id]
+  )
+
+  const handleRemove = useCallback(() => onRemove(row.id), [onRemove, row.id])
+
+  return (
+    <div>
+      {isNewTier && <div className="my-1 border-t border-dashed border-muted-foreground/25" />}
+      <div
+        draggable
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+        className={`flex items-center gap-3 rounded-md border p-2 transition-colors ${
+          isDragging
+            ? 'opacity-50'
+            : isDragOver
+              ? 'border-primary bg-primary/5'
+              : 'bg-background'
+        }`}
+      >
+        {/* Drag handle */}
+        <div className="flex cursor-grab items-center text-muted-foreground active:cursor-grabbing" title="Drag to reorder">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="5" cy="3" r="1.5" />
+            <circle cx="11" cy="3" r="1.5" />
+            <circle cx="5" cy="8" r="1.5" />
+            <circle cx="11" cy="8" r="1.5" />
+            <circle cx="5" cy="13" r="1.5" />
+            <circle cx="11" cy="13" r="1.5" />
+          </svg>
+        </div>
+
+        {/* Placement badge */}
+        <div className="flex w-14 shrink-0 items-center justify-center">
+          <span className={`inline-flex h-7 w-12 items-center justify-center rounded text-xs font-bold ${
+            placement === 1
+              ? 'bg-yellow-500/20 text-yellow-400'
+              : placement === 2
+                ? 'bg-gray-400/20 text-gray-300'
+                : placement === 3
+                  ? 'bg-amber-700/20 text-amber-500'
+                  : 'bg-muted text-muted-foreground'
+          }`}>
+            {placement}{placement === 1 ? 'st' : placement === 2 ? 'nd' : placement === 3 ? 'rd' : 'th'}
+          </span>
+        </div>
+
+        {/* Player picker */}
+        <div className="flex-1">
+          <PlayerPicker
+            playerMap={playerMap}
+            players={players}
+            value={row.playerId}
+            onChange={handleChange}
+            onCreatePlayer={handleCreate}
+          />
+        </div>
+
+        {/* Remove */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+          onClick={handleRemove}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </Button>
+      </div>
+    </div>
+  )
+})
 
 // ---------------------------------------------------------------------------
 // Manual Entry Tab
 // ---------------------------------------------------------------------------
 
-function ManualEntryTab({ players }: { players: Player[] }) {
+function ManualEntryTab({ players: initialPlayers }: { players: Player[] }) {
   const router = useRouter()
+  const [localPlayers, setLocalPlayers] = useState<Player[]>(initialPlayers)
   const [name, setName] = useState('')
   const [date, setDate] = useState('')
   const [participants, setParticipants] = useState<ParticipantRow[]>([
-    { id: generateRowId(), playerId: '', playerLabel: '', placement: 1 },
+    { id: generateRowId(), playerId: '', playerLabel: '' },
   ])
+  const [bracketFormat, setBracketFormat] = useState<BracketFormat>('double')
   const [submitting, setSubmitting] = useState(false)
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
 
-  function addParticipant() {
-    const nextPlacement =
-      participants.length > 0
-        ? Math.max(...participants.map((p) => p.placement)) + 1
-        : 1
+  // Keep local list in sync if parent re-fetches
+  useEffect(() => { setLocalPlayers(initialPlayers) }, [initialPlayers])
+
+  // O(1) player lookup map — rebuilt only when player list changes
+  const playerMap = useMemo(() => {
+    const m = new Map<string, Player>()
+    for (const p of localPlayers) m.set(p.id, p)
+    return m
+  }, [localPlayers])
+
+  const addParticipant = useCallback(() => {
     setParticipants((prev) => [
       ...prev,
-      {
-        id: generateRowId(),
-        playerId: '',
-        playerLabel: '',
-        placement: nextPlacement,
-      },
+      { id: generateRowId(), playerId: '', playerLabel: '' },
     ])
-  }
+  }, [])
 
-  function removeParticipant(rowId: string) {
+  const removeParticipant = useCallback((rowId: string) => {
     setParticipants((prev) => prev.filter((p) => p.id !== rowId))
-  }
+  }, [])
 
-  function updateParticipant(
+  const updateParticipant = useCallback((
     rowId: string,
     field: Partial<ParticipantRow>
-  ) {
+  ) => {
     setParticipants((prev) =>
       prev.map((p) => (p.id === rowId ? { ...p, ...field } : p))
     )
-  }
+  }, [])
+
+  const moveParticipant = useCallback((fromIdx: number, toIdx: number) => {
+    setParticipants((prev) => {
+      const next = [...prev]
+      const [moved] = next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, moved)
+      return next
+    })
+  }, [])
+
+  // Inline player creation — stable callback for memoized rows
+  const handleCreatePlayer = useCallback(async (rowId: string, gamerTag: string) => {
+    const result = await createPlayer(gamerTag)
+    if ('error' in result) {
+      toast.error(result.error)
+      return
+    }
+    setLocalPlayers((prev) =>
+      [...prev, result].sort((a, b) => a.gamer_tag.localeCompare(b.gamer_tag))
+    )
+    setParticipants((prev) =>
+      prev.map((p) => p.id === rowId ? { ...p, playerId: result.id, playerLabel: result.gamer_tag } : p)
+    )
+    toast.success(`Created "${result.gamer_tag}"`)
+  }, [])
+
+  // Compute placements from list order — only recalc when length or format changes
+  const placements = useMemo(
+    () => participants.map((_, i) => bracketPlacement(i + 1, bracketFormat)),
+    [participants.length, bracketFormat]
+  )
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -217,9 +472,9 @@ function ManualEntryTab({ players }: { players: Player[] }) {
       const result = await createTournament({
         name: name.trim(),
         date,
-        participants: participants.map((p) => ({
+        participants: participants.map((p, i) => ({
           playerId: p.playerId,
-          placement: p.placement,
+          placement: placements[i],
         })),
       })
 
@@ -238,7 +493,7 @@ function ManualEntryTab({ players }: { players: Player[] }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-2">
           <Label htmlFor="tournament-name">Tournament Name</Label>
           <Input
@@ -257,13 +512,45 @@ function ManualEntryTab({ players }: { players: Player[] }) {
             onChange={(e) => setDate(e.target.value)}
           />
         </div>
+        <div className="space-y-2">
+          <Label>Bracket Format</Label>
+          <div className="flex gap-1 rounded-md border p-1">
+            <button
+              type="button"
+              className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                bracketFormat === 'double'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => setBracketFormat('double')}
+            >
+              Double Elim
+            </button>
+            <button
+              type="button"
+              className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                bracketFormat === 'single'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => setBracketFormat('single')}
+            >
+              Single Elim
+            </button>
+          </div>
+        </div>
       </div>
 
       <Separator />
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Participants</h3>
+          <div>
+            <h3 className="text-lg font-semibold">Participants</h3>
+            <p className="text-xs text-muted-foreground">
+              Drag to reorder. Placements follow standard bracket format.
+            </p>
+          </div>
           <Button type="button" variant="outline" size="sm" onClick={addParticipant}>
             Add Participant
           </Button>
@@ -274,45 +561,41 @@ function ManualEntryTab({ players }: { players: Player[] }) {
             No participants added yet.
           </p>
         ) : (
-          <div className="space-y-3">
-            {participants.map((row) => (
-              <div
+          <div className="space-y-1">
+            {participants.map((row, idx) => (
+              <ParticipantRowItem
                 key={row.id}
-                className="flex items-center gap-3 rounded-md border p-3"
-              >
-                <div className="flex-1">
-                  <PlayerPicker
-                    players={players}
-                    value={row.playerId}
-                    onChange={(playerId, label) =>
-                      updateParticipant(row.id, { playerId, playerLabel: label })
-                    }
-                  />
-                </div>
-                <div className="w-24">
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="#"
-                    value={row.placement}
-                    onChange={(e) =>
-                      updateParticipant(row.id, {
-                        placement: parseInt(e.target.value, 10) || 1,
-                      })
-                    }
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeParticipant(row.id)}
-                >
-                  Remove
-                </Button>
-              </div>
+                row={row}
+                placement={placements[idx]}
+                isNewTier={idx > 0 && placements[idx] !== placements[idx - 1]}
+                isDragging={dragIdx === idx}
+                isDragOver={dragOverIdx === idx}
+                playerMap={playerMap}
+                players={localPlayers}
+                onUpdate={updateParticipant}
+                onRemove={removeParticipant}
+                onCreate={handleCreatePlayer}
+                onDragStart={() => setDragIdx(idx)}
+                onDragOver={(e: React.DragEvent) => { e.preventDefault(); setDragOverIdx(idx) }}
+                onDragEnd={() => {
+                  if (dragIdx !== null && dragOverIdx !== null && dragIdx !== dragOverIdx) {
+                    moveParticipant(dragIdx, dragOverIdx)
+                  }
+                  setDragIdx(null)
+                  setDragOverIdx(null)
+                }}
+              />
             ))}
           </div>
+        )}
+
+        {/* Placement tier reference */}
+        {participants.length > 2 && (
+          <p className="text-xs text-muted-foreground">
+            {bracketFormat === 'double'
+              ? 'Double elim tiers: 1st, 2nd, 3rd, 4th, 5th×2, 7th×2, 9th×4, 13th×4, 17th×8...'
+              : 'Single elim tiers: 1st, 2nd, 3rd×2, 5th×4, 9th×8, 17th×16...'}
+          </p>
         )}
       </div>
 
@@ -449,10 +732,15 @@ function StartggImportTab() {
       setTournamentStartAt(result.startAt)
       setEvents(result.events)
 
+      // Filter to singles-only events for auto-selection
+      const singlesEvents = result.events.filter(
+        (ev) => (ev.teamRosterSize?.maxPlayers ?? 1) <= 1
+      )
+
       // Auto-select if event URL was pasted (e.g. /event/arcadian-singles)
       if (result.suggestedEventSlug) {
         const slugLower = result.suggestedEventSlug.toLowerCase()
-        const matched = result.events.find(
+        const matched = singlesEvents.find(
           (ev) => ev.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === slugLower
         )
         if (matched) {
@@ -460,9 +748,9 @@ function StartggImportTab() {
         }
       }
 
-      // Auto-select if only one event
-      if (result.events.length === 1) {
-        setSelectedEventId(String(result.events[0].id))
+      // Auto-select if only one singles event
+      if (singlesEvents.length === 1) {
+        setSelectedEventId(String(singlesEvents[0].id))
       }
     } catch {
       toast.error('Failed to fetch from start.gg')
@@ -591,11 +879,14 @@ function StartggImportTab() {
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {events.map((ev) => (
-                    <SelectItem key={ev.id} value={String(ev.id)} label={`${ev.name} (${ev.numEntrants} entrants)`}>
-                      {ev.name} ({ev.numEntrants} entrants)
-                    </SelectItem>
-                  ))}
+                  {events.map((ev) => {
+                    const isTeams = (ev.teamRosterSize?.maxPlayers ?? 1) > 1
+                    return (
+                      <SelectItem key={ev.id} value={String(ev.id)} label={`${ev.name} (${ev.numEntrants} entrants)`} disabled={isTeams}>
+                        {ev.name} ({ev.numEntrants} entrants){isTeams ? ' — Doubles/Teams' : ''}
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>

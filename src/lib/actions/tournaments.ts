@@ -253,6 +253,12 @@ export async function loadEventPreview(
 ): Promise<{ error: string } | { preview: ImportPreview }> {
   await requireAdmin()
 
+  // Block doubles/teams events — our system only supports singles (1 player per entrant)
+  const rosterMax = event.teamRosterSize?.maxPlayers ?? null
+  if (rosterMax !== null && rosterMax > 1) {
+    return { error: `"${event.name}" is a doubles/teams event (${rosterMax}v${rosterMax}). Only singles events can be imported.` }
+  }
+
   const standings = await fetchEventStandings(event.id)
 
   const preview = await buildImportPreview(

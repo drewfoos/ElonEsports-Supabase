@@ -77,6 +77,7 @@ query TournamentEvents($slug: String!, $videogameId: [ID]!) {
       id
       name
       numEntrants
+      teamRosterSize { maxPlayers }
     }
   }
 }

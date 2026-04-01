@@ -77,6 +77,7 @@ export interface StartggEvent {
   id: number;
   name: string;
   numEntrants: number;
+  teamRosterSize: { maxPlayers: number | null } | null; // null or maxPlayers 1 = singles, 2+ = doubles/teams
 }
 
 export interface StartggStanding {
