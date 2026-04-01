@@ -70,7 +70,7 @@ Both types are treated identically by the scoring formula once confirmed.
 Every tournament in the semester gets a **weight** based on what fraction of the field was Elon students, normalized by how many Elon students exist that semester:
 
 ```
-weight = (elonParticipants / totalParticipants) / totalElonStudents
+weight = (elonParticipants / totalParticipants)
 ```
 
 **What this means:**

@@ -4,10 +4,12 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   getPlayers,
   getPlayersWithStatus,
+  getPlayersWithTournamentCount,
   createPlayer,
   updatePlayer,
   deletePlayer,
   updatePlayerElonStatus,
+  updatePlayerStartggIds,
   mergePlayers,
 } from '@/lib/actions/players'
 import { getSemesters, getCurrentSemester } from '@/lib/actions/semesters'
@@ -39,6 +41,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { toast } from 'sonner'
 import type { Player, Semester } from '@/lib/types'
 
@@ -63,19 +73,32 @@ export default function PlayersPage() {
   const [deleteTarget, setDeleteTarget] = useState<Player | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
+  // Track which players have an in-flight Elon toggle
+  const [togglingElon, setTogglingElon] = useState<Set<string>>(new Set())
+
+  const [idsPlayer, setIdsPlayer] = useState<Player | null>(null)
+  const [idsValue, setIdsValue] = useState<string[]>([])
+  const [idsNewId, setIdsNewId] = useState('')
+  const [idsLoading, setIdsLoading] = useState(false)
+
   const [mergeOpen, setMergeOpen] = useState(false)
   const [mergeKeepId, setMergeKeepId] = useState('')
   const [mergeMergeId, setMergeMergeId] = useState('')
   const [mergeLoading, setMergeLoading] = useState(false)
+  const [allPlayers, setAllPlayers] = useState<(Player & { tournament_count: number })[]>([])
+  const [keepSearch, setKeepSearch] = useState('')
+  const [mergeSearch, setMergeSearch] = useState('')
 
-  // Load semesters on mount
+  // Load semesters on mount (parallel)
   useEffect(() => {
     async function load() {
-      const semResult = await getSemesters()
+      const [semResult, current] = await Promise.all([
+        getSemesters(),
+        getCurrentSemester(),
+      ])
       if ('error' in semResult) return
       setSemesters(semResult)
 
-      const current = await getCurrentSemester()
       if (current && !('error' in current)) {
         setSelectedSemesterId(current.id)
       } else if (semResult.length > 0) {
@@ -164,12 +187,72 @@ export default function PlayersPage() {
 
   async function handleElonToggle(playerId: string, newValue: boolean) {
     if (!selectedSemesterId) return
-    const result = await updatePlayerElonStatus(playerId, selectedSemesterId, newValue)
-    if ('error' in result) {
-      toast.error(result.error)
-    } else {
-      toast.success(newValue ? 'Marked as Elon student' : 'Removed Elon status')
-      loadPlayers(selectedSemesterId)
+
+    // Optimistic update — switch flips instantly
+    setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, is_elon_student: newValue } : p))
+    setTogglingElon(prev => new Set(prev).add(playerId))
+
+    try {
+      const result = await updatePlayerElonStatus(playerId, selectedSemesterId, newValue)
+      if ('error' in result) {
+        // Revert on error
+        setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, is_elon_student: !newValue } : p))
+        toast.error(result.error)
+      } else {
+        toast.success(newValue ? 'Marked as Elon student' : 'Removed Elon status')
+      }
+    } catch {
+      // Revert on error
+      setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, is_elon_student: !newValue } : p))
+      toast.error('Failed to update Elon status')
+    } finally {
+      setTogglingElon(prev => {
+        const next = new Set(prev)
+        next.delete(playerId)
+        return next
+      })
+    }
+  }
+
+  function openIdsDialog(player: Player) {
+    setIdsPlayer(player)
+    setIdsValue([...player.startgg_player_ids])
+    setIdsNewId('')
+  }
+
+  function handleAddId() {
+    const trimmed = idsNewId.trim()
+    if (!trimmed || idsValue.includes(trimmed)) return
+    setIdsValue([...idsValue, trimmed])
+    setIdsNewId('')
+  }
+
+  function handleRemoveId(id: string) {
+    setIdsValue(idsValue.filter(v => v !== id))
+  }
+
+  async function handleSaveIds() {
+    if (!idsPlayer) return
+    setIdsLoading(true)
+    try {
+      const result = await updatePlayerStartggIds(idsPlayer.id, idsValue)
+      if ('error' in result) {
+        toast.error(result.error)
+      } else {
+        toast.success('start.gg IDs updated')
+        setIdsPlayer(null)
+        loadPlayers(selectedSemesterId)
+      }
+    } finally {
+      setIdsLoading(false)
+    }
+  }
+
+  async function openMergeDialog() {
+    setMergeOpen(true)
+    const data = await getPlayersWithTournamentCount()
+    if (!('error' in data)) {
+      setAllPlayers(data)
     }
   }
 
@@ -185,6 +268,8 @@ export default function PlayersPage() {
         setMergeOpen(false)
         setMergeKeepId('')
         setMergeMergeId('')
+        setKeepSearch('')
+        setMergeSearch('')
         loadPlayers(selectedSemesterId)
       }
     } finally {
@@ -197,7 +282,7 @@ export default function PlayersPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Players</h1>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setMergeOpen(true)}>
+          <Button variant="outline" onClick={openMergeDialog}>
             Merge Players
           </Button>
           <Button onClick={() => setAddOpen(true)}>Add Player</Button>
@@ -213,11 +298,13 @@ export default function PlayersPage() {
             onValueChange={(val) => { if (val) setSelectedSemesterId(val) }}
           >
             <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select semester" />
+              <SelectValue placeholder="Select semester">
+                {semesters.find((s) => s.id === selectedSemesterId)?.name}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {semesters.map(s => (
-                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                <SelectItem key={s.id} value={s.id} label={s.name}>{s.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -253,27 +340,40 @@ export default function PlayersPage() {
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">{p.gamer_tag}</TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      onClick={() => openIdsDialog(p)}
+                      className="flex flex-wrap gap-1 rounded px-1 py-0.5 hover:bg-accent transition-colors"
+                      title="Click to manage start.gg IDs"
+                    >
                       {p.startgg_player_ids.length > 0 ? (
                         p.startgg_player_ids.map(id => (
                           <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
                         ))
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-xs text-muted-foreground">+ Add ID</span>
                       )}
-                    </div>
+                    </button>
                   </TableCell>
                   <TableCell>
-                    <Switch
-                      checked={p.is_elon_student}
-                      onCheckedChange={(checked) => handleElonToggle(p.id, checked)}
-                    />
+                    {togglingElon.has(p.id) ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-foreground" />
+                        <span className="text-xs text-muted-foreground">Recalculating...</span>
+                      </div>
+                    ) : (
+                      <Switch
+                        checked={p.is_elon_student}
+                        onCheckedChange={(checked) => handleElonToggle(p.id, checked)}
+                      />
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
+                        disabled={togglingElon.has(p.id)}
                         onClick={() => { setEditPlayer(p); setEditTag(p.gamer_tag) }}
                       >
                         Edit
@@ -281,6 +381,7 @@ export default function PlayersPage() {
                       <Button
                         variant="destructive"
                         size="sm"
+                        disabled={togglingElon.has(p.id)}
                         onClick={() => setDeleteTarget(p)}
                       >
                         Delete
@@ -367,9 +468,60 @@ export default function PlayersPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Manage start.gg IDs Dialog */}
+      <Dialog open={idsPlayer !== null} onOpenChange={(open) => { if (!open) setIdsPlayer(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage start.gg IDs</DialogTitle>
+            <DialogDescription>
+              Add or remove start.gg player IDs for &ldquo;{idsPlayer?.gamer_tag}&rdquo;.
+              These are used to match players during tournament imports.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {idsValue.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {idsValue.map(id => (
+                  <Badge key={id} variant="secondary" className="gap-1 text-sm">
+                    {id}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveId(id)}
+                      className="ml-1 rounded-full hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                      aria-label={`Remove ID ${id}`}
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No start.gg IDs linked yet.</p>
+            )}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter start.gg player ID"
+                value={idsNewId}
+                onChange={e => setIdsNewId(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddId() }}
+              />
+              <Button variant="outline" onClick={handleAddId} disabled={!idsNewId.trim()}>
+                Add
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIdsPlayer(null)}>Cancel</Button>
+            <Button onClick={handleSaveIds} disabled={idsLoading}>
+              {idsLoading ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Merge Players Dialog */}
       <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Merge Players</DialogTitle>
             <DialogDescription>
@@ -378,38 +530,129 @@ export default function PlayersPage() {
               better placement is kept. Player B will be deleted.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="grid gap-4 py-4 sm:grid-cols-2">
+            {/* Player A (keep) */}
             <div className="space-y-2">
-              <Label>Player A (keep)</Label>
-              <Select
-                value={mergeKeepId}
-                onValueChange={(val) => { if (val) setMergeKeepId(val) }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select player to keep" />
-                </SelectTrigger>
-                <SelectContent>
-                  {players.filter(p => p.id !== mergeMergeId).map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.gamer_tag}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-sm font-medium">Player A (keep)</Label>
+              {mergeKeepId ? (() => {
+                const p = allPlayers.find(p => p.id === mergeKeepId)
+                if (!p) return null
+                return (
+                  <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{p.gamer_tag}</span>
+                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => { setMergeKeepId(''); setKeepSearch('') }}>
+                        Change
+                      </Button>
+                    </div>
+                    <span className="text-muted-foreground text-xs">
+                      {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
+                    </span>
+                    {p.startgg_player_ids.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {p.startgg_player_ids.map(id => (
+                          <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })() : (
+                <Command className="rounded-md border" shouldFilter={false}>
+                  <CommandInput
+                    placeholder="Search players..."
+                    value={keepSearch}
+                    onValueChange={setKeepSearch}
+                  />
+                  <CommandList className="max-h-64">
+                    <CommandEmpty>No players found.</CommandEmpty>
+                    <CommandGroup>
+                      {allPlayers
+                        .filter(p => p.id !== mergeMergeId && p.gamer_tag.toLowerCase().includes(keepSearch.toLowerCase()))
+                        .slice(0, 50)
+                        .map(p => (
+                          <CommandItem
+                            key={p.id}
+                            value={p.id}
+                            onSelect={() => setMergeKeepId(p.id)}
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-medium">{p.gamer_tag}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
+                                {p.startgg_player_ids.length > 0 && (
+                                  <> · {p.startgg_player_ids.join(', ')}</>
+                                )}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              )}
             </div>
+
+            {/* Player B (merge & delete) */}
             <div className="space-y-2">
-              <Label>Player B (merge &amp; delete)</Label>
-              <Select
-                value={mergeMergeId}
-                onValueChange={(val) => { if (val) setMergeMergeId(val) }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select player to merge" />
-                </SelectTrigger>
-                <SelectContent>
-                  {players.filter(p => p.id !== mergeKeepId).map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.gamer_tag}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-sm font-medium">Player B (merge &amp; delete)</Label>
+              {mergeMergeId ? (() => {
+                const p = allPlayers.find(p => p.id === mergeMergeId)
+                if (!p) return null
+                return (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{p.gamer_tag}</span>
+                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => { setMergeMergeId(''); setMergeSearch('') }}>
+                        Change
+                      </Button>
+                    </div>
+                    <span className="text-muted-foreground text-xs">
+                      {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
+                    </span>
+                    {p.startgg_player_ids.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {p.startgg_player_ids.map(id => (
+                          <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })() : (
+                <Command className="rounded-md border" shouldFilter={false}>
+                  <CommandInput
+                    placeholder="Search players..."
+                    value={mergeSearch}
+                    onValueChange={setMergeSearch}
+                  />
+                  <CommandList className="max-h-64">
+                    <CommandEmpty>No players found.</CommandEmpty>
+                    <CommandGroup>
+                      {allPlayers
+                        .filter(p => p.id !== mergeKeepId && p.gamer_tag.toLowerCase().includes(mergeSearch.toLowerCase()))
+                        .slice(0, 50)
+                        .map(p => (
+                          <CommandItem
+                            key={p.id}
+                            value={p.id}
+                            onSelect={() => setMergeMergeId(p.id)}
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-medium">{p.gamer_tag}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
+                                {p.startgg_player_ids.length > 0 && (
+                                  <> · {p.startgg_player_ids.join(', ')}</>
+                                )}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              )}
             </div>
           </div>
           <DialogFooter>

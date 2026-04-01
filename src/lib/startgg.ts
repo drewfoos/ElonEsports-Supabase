@@ -128,7 +128,6 @@ query EventSets($eventId: ID!, $page: Int!, $perPage: Int!) {
         displayScore
         fullRoundText
         winnerId
-        loserId
         slots {
           id
           entrant {
@@ -161,21 +160,35 @@ query EventSets($eventId: ID!, $page: Int!, $perPage: Int!) {
 // ---------------------------------------------------------------------------
 
 /**
- * Extract the tournament slug from a start.gg URL.
+ * Extract the tournament slug and optional event slug from a start.gg URL.
  *
  * Accepts URLs like:
- *   https://www.start.gg/tournament/genesis-x/event/ultimate-singles
+ *   https://www.start.gg/tournament/genesis-x/event/ultimate-singles/overview
+ *   https://www.start.gg/tournament/genesis-x/events
  *   https://start.gg/tournament/elon-weekly-42
  *
- * Returns null if the URL does not match the expected pattern.
+ * Returns { tournamentSlug, eventSlug } or null if invalid.
  */
-export function extractSlug(url: string): string | null {
-  const match = url.match(/start\.gg\/tournament\/([^/]+)/);
-  return match ? match[1] : null;
+export function extractSlugs(url: string): {
+  tournamentSlug: string;
+  eventSlug: string | null;
+} | null {
+  const tournamentMatch = url.match(/start\.gg\/tournament\/([^/]+)/);
+  if (!tournamentMatch) return null;
+
+  const eventMatch = url.match(
+    /start\.gg\/tournament\/[^/]+\/event\/([^/]+)/
+  );
+
+  return {
+    tournamentSlug: tournamentMatch[1],
+    eventSlug: eventMatch ? eventMatch[1] : null,
+  };
 }
 
 /**
  * Fetch tournament metadata and all Smash Ultimate events for a tournament.
+ * Events are sorted by entrant count descending (largest first).
  */
 export async function fetchTournamentEvents(
   slug: string,
@@ -200,46 +213,28 @@ export async function fetchTournamentEvents(
     );
   }
 
+  // Sort events by entrant count descending so the main event is first
+  const events = (data.tournament.events ?? []).sort(
+    (a, b) => b.numEntrants - a.numEntrants
+  );
+
   return {
     name: data.tournament.name,
     startAt: data.tournament.startAt,
-    events: data.tournament.events ?? [],
+    events,
   };
-}
-
-/**
- * Auto-detect the singles event from a list of events.
- *
- * - If exactly 1 event, return it directly.
- * - If multiple, look for one whose name contains "singles" (case-insensitive).
- * - If still ambiguous, return all events so the admin can choose.
- */
-export function autoDetectSinglesEvent(
-  events: StartggEvent[],
-): StartggEvent | StartggEvent[] {
-  if (events.length === 1) {
-    return events[0];
-  }
-
-  const singlesEvents = events.filter((e) => /singles/i.test(e.name));
-
-  if (singlesEvents.length === 1) {
-    return singlesEvents[0];
-  }
-
-  // Ambiguous — return all events for the admin to pick from
-  return events;
 }
 
 /**
  * Fetch all standings (placements) for a given event, handling pagination.
  *
- * Uses perPage 64 by default to stay under the 1000 object complexity cap.
- * Adds a 750ms delay between paginated requests to respect rate limits.
+ * Uses perPage 100 to stay under the 1000 object complexity cap (~8 objects per standing).
+ * Adds a 400ms delay between paginated requests to respect rate limits.
+ * (80 req/min limit, but burst-safe since imports are single-threaded.)
  */
 export async function fetchEventStandings(
   eventId: number,
-  perPage: number = 64,
+  perPage: number = 100,
 ): Promise<StartggStanding[]> {
   interface StandingsResponse {
     event: {
@@ -258,7 +253,7 @@ export async function fetchEventStandings(
 
   do {
     if (page > 1) {
-      await delay(750);
+      await delay(400);
     }
 
     const data = await startggQuery<StandingsResponse>(
@@ -286,12 +281,12 @@ export async function fetchEventStandings(
 /**
  * Fetch all sets (match/bracket data) for a given event, handling pagination.
  *
- * Uses perPage 64 by default to stay under the 1000 object complexity cap.
- * Adds a 750ms delay between paginated requests to respect rate limits.
+ * Uses perPage 40 to stay under the 1000 object complexity cap (~17 objects per set).
+ * Adds a 400ms delay between paginated requests to respect rate limits.
  */
 export async function fetchEventSets(
   eventId: number,
-  perPage: number = 64,
+  perPage: number = 40,
 ): Promise<StartggSet[]> {
   interface SetsResponse {
     event: {
@@ -310,7 +305,7 @@ export async function fetchEventSets(
 
   do {
     if (page > 1) {
-      await delay(750);
+      await delay(400);
     }
 
     const data = await startggQuery<SetsResponse>(EVENT_SETS_QUERY, {

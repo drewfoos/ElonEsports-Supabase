@@ -209,9 +209,12 @@ export default function SemestersPage() {
               </div>
             </div>
           </div>
+          {addStart && addEnd && addStart >= addEnd && (
+            <p className="text-sm text-destructive">Start date must be before end date.</p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={handleAdd} disabled={addLoading || !addName.trim() || !addStart || !addEnd}>
+            <Button onClick={handleAdd} disabled={addLoading || !addName.trim() || !addStart || !addEnd || addStart >= addEnd}>
               {addLoading ? 'Creating...' : 'Create'}
             </Button>
           </DialogFooter>
@@ -247,9 +250,12 @@ export default function SemestersPage() {
               </div>
             </div>
           </div>
+          {editStart && editEnd && editStart >= editEnd && (
+            <p className="text-sm text-destructive">Start date must be before end date.</p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditSemester(null)}>Cancel</Button>
-            <Button onClick={handleEdit} disabled={editLoading || !editStart || !editEnd}>
+            <Button onClick={handleEdit} disabled={editLoading || !editStart || !editEnd || editStart >= editEnd}>
               {editLoading ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>

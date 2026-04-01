@@ -29,6 +29,7 @@ export interface Tournament {
   date: string;
   source: "startgg" | "manual";
   startgg_slug: string | null;
+  startgg_event_id: string | null;
   total_participants: number;
   elon_participants: number;
   weight: number;
@@ -122,7 +123,6 @@ export interface StartggSet {
   displayScore: string | null;
   fullRoundText: string | null;
   winnerId: number | null;
-  loserId: number | null;
   slots: StartggSetSlot[];
 }
 
@@ -131,6 +131,7 @@ export interface StartggSet {
 export interface ImportPreview {
   tournamentName: string;
   tournamentDate: string;
+  startggSlug: string;
   eventName: string;
   eventId: number;
   totalParticipants: number;
@@ -138,6 +139,8 @@ export interface ImportPreview {
 }
 
 export interface ImportStanding {
+  /** Stable unique key for this standing — startggPlayerId or fallback index */
+  key: string;
   placement: number;
   startggPlayerId: number | null;
   gamerTag: string;

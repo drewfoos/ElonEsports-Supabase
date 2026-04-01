@@ -6,36 +6,33 @@ import { SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * Compute tournament weight.
- * weight = (elonParticipants / totalParticipants) / totalElonStudents
- * Returns 0 if any denominator is 0.
+ * weight = elonParticipants / totalParticipants
+ *
+ * This captures competition difficulty:
+ * - Elon-only weekly (10/11 = 0.91) → high weight → placements count a lot
+ * - Mixed local (5/35 = 0.14) → low weight → rewards showing up against tougher fields
+ * - Major regional (5/500 = 0.01) → very low weight → even mid-pack is impressive
+ *
+ * Lower weight = harder competition = better (lower) scores for good placements.
  */
 export function computeWeight(
   elonParticipants: number,
   totalParticipants: number,
-  totalElonStudents: number,
 ): number {
-  if (totalParticipants === 0 || totalElonStudents === 0) return 0
-  return (elonParticipants / totalParticipants) / totalElonStudents
+  if (!Number.isFinite(totalParticipants) || totalParticipants <= 0) return 0
+  if (!Number.isFinite(elonParticipants) || elonParticipants < 0) return 0
+  return elonParticipants / totalParticipants
 }
 
 /**
  * Compute a single tournament result score.
- * score = placement * weight
+ * score = placement × weight
+ *
+ * Lower is better. 1st at a local (1 × 0.14 = 0.14) beats 1st at a weekly (1 × 0.91).
  */
 export function computeScore(placement: number, weight: number): number {
+  if (!Number.isFinite(placement) || !Number.isFinite(weight)) return 0
   return placement * weight
-}
-
-/**
- * Compute average score across tournaments.
- * Returns 0 if tournamentCount is 0.
- */
-export function computeAverageScore(
-  totalScore: number,
-  tournamentCount: number,
-): number {
-  if (tournamentCount === 0) return 0
-  return totalScore / tournamentCount
 }
 
 // ---------------------------------------------------------------------------
@@ -53,16 +50,26 @@ function throwIfError<T>(
 }
 
 // ---------------------------------------------------------------------------
-// Main recalculation function
+// Main recalculation function — optimized for parallel DB operations
 // ---------------------------------------------------------------------------
+
+type ResultRow = {
+  id: string
+  tournament_id: string
+  player_id: string
+  placement: number
+}
 
 /**
  * Fully recalculate all scores for a semester.
  *
- * This is the authoritative scoring pipeline. It must be called after every
- * data mutation that could affect rankings (tournament CRUD, Elon status
- * change, player merge).
+ * Optimized for Vercel serverless timeouts:
+ * - Parallel fetches (elon students + tournaments + all results)
+ * - In-memory weight/score computation (zero extra DB reads)
+ * - Parallel batch updates (tournament weights + result scores)
+ * - No re-fetch for aggregation (uses in-memory computed values)
  *
+ * Must be called after: tournament CRUD, Elon status change, player merge/delete.
  * Uses the admin (service-role) Supabase client to bypass RLS.
  */
 export async function recalculateSemester(
@@ -70,24 +77,34 @@ export async function recalculateSemester(
   adminClient: SupabaseClient,
 ): Promise<void> {
   // ------------------------------------------------------------------
-  // 1. Count total Elon students for this semester
+  // 1. Parallel fetch: Elon students + tournaments
   // ------------------------------------------------------------------
-  const statusRows = throwIfError(
-    await adminClient
+  const [statusResult, tournamentsResult] = await Promise.all([
+    adminClient
       .from('player_semester_status')
       .select('player_id')
       .eq('semester_id', semesterId)
       .eq('is_elon_student', true),
-    'count Elon students',
+    adminClient
+      .from('tournaments')
+      .select('id, total_participants')
+      .eq('semester_id', semesterId),
+  ])
+
+  const statusRows = throwIfError(statusResult, 'count Elon students')
+  const tournaments = throwIfError(tournamentsResult, 'fetch tournaments') as {
+    id: string
+    total_participants: number
+  }[]
+
+  const elonPlayerIds = new Set(
+    (statusRows ?? []).map((r: { player_id: string }) => r.player_id),
   )
 
-  const totalElonStudents = (statusRows ?? []).length
-  const elonPlayerIds = new Set((statusRows ?? []).map((r: { player_id: string }) => r.player_id))
-
   // ------------------------------------------------------------------
-  // 2. If no Elon students, clear scores and return early
+  // 2. Early exits — clear scores and return
   // ------------------------------------------------------------------
-  if (totalElonStudents === 0) {
+  if (elonPlayerIds.size === 0) {
     throwIfError(
       await adminClient
         .from('player_semester_scores')
@@ -98,141 +115,176 @@ export async function recalculateSemester(
     return
   }
 
+  if (tournaments.length === 0) {
+    throwIfError(
+      await adminClient
+        .from('player_semester_scores')
+        .delete()
+        .eq('semester_id', semesterId),
+      'clear scores (no tournaments)',
+    )
+    return
+  }
+
   // ------------------------------------------------------------------
-  // 3. Get all tournaments in this semester
+  // 3. Parallel fetch: results for ALL tournaments at once
+  //    Each tournament is its own query to avoid the 1000-row default limit.
   // ------------------------------------------------------------------
-  const tournaments = throwIfError(
-    await adminClient
-      .from('tournaments')
-      .select('id, total_participants')
-      .eq('semester_id', semesterId),
-    'fetch tournaments',
+  const resultsByTournament = new Map<string, ResultRow[]>()
+
+  await Promise.all(
+    tournaments.map(async (t) => {
+      const data = throwIfError(
+        await adminClient
+          .from('tournament_results')
+          .select('id, tournament_id, player_id, placement')
+          .eq('tournament_id', t.id),
+        `fetch results for tournament ${t.id}`,
+      ) as ResultRow[]
+      resultsByTournament.set(t.id, data)
+    }),
   )
 
   // ------------------------------------------------------------------
-  // 4. For each tournament: count Elon participants, compute weight,
-  //    update the tournament row, and score each Elon result
+  // 4. Compute all weights and scores entirely in memory
   // ------------------------------------------------------------------
-  for (const tournament of tournaments as { id: string; total_participants: number }[]) {
-    // Fetch all results for this tournament
-    const results = throwIfError(
-      await adminClient
-        .from('tournament_results')
-        .select('id, player_id, placement')
-        .eq('tournament_id', tournament.id),
-      `fetch results for tournament ${tournament.id}`,
-    )
+  const resultScoreMap = new Map<string, number>() // result.id → computed score
+  const tournamentWeightData: {
+    id: string
+    weight: number
+    elonCount: number
+  }[] = []
 
-    const typedResults = results as { id: string; player_id: string; placement: number }[]
+  for (const tournament of tournaments) {
+    const results = resultsByTournament.get(tournament.id) ?? []
+    const elonCount = results.filter((r) =>
+      elonPlayerIds.has(r.player_id),
+    ).length
+    const weight = computeWeight(elonCount, tournament.total_participants)
 
-    // Count Elon participants in this tournament
-    const elonResults = typedResults.filter((r) => elonPlayerIds.has(r.player_id))
-    const elonParticipants = elonResults.length
+    tournamentWeightData.push({ id: tournament.id, weight, elonCount })
 
-    // Compute weight
-    const weight = computeWeight(
-      elonParticipants,
-      tournament.total_participants,
-      totalElonStudents,
-    )
-
-    // Update tournament with computed weight and elon_participants
-    throwIfError(
-      await adminClient
-        .from('tournaments')
-        .update({ weight, elon_participants: elonParticipants })
-        .eq('id', tournament.id),
-      `update tournament ${tournament.id} weight`,
-    )
-
-    // ------------------------------------------------------------------
-    // 5. Update scores for each Elon player's result in this tournament
-    // ------------------------------------------------------------------
-    for (const result of elonResults) {
-      const score = computeScore(result.placement, weight)
-      throwIfError(
-        await adminClient
-          .from('tournament_results')
-          .update({ score })
-          .eq('id', result.id),
-        `update score for result ${result.id}`,
-      )
+    for (const r of results) {
+      const score = elonPlayerIds.has(r.player_id)
+        ? computeScore(r.placement, weight)
+        : 0
+      resultScoreMap.set(r.id, score)
     }
   }
 
   // ------------------------------------------------------------------
-  // 6. Delete all existing player_semester_scores for this semester
+  // 5. Build batched score updates grouped by value (fewer queries)
   // ------------------------------------------------------------------
-  throwIfError(
-    await adminClient
-      .from('player_semester_scores')
-      .delete()
-      .eq('semester_id', semesterId),
-    'delete existing player_semester_scores',
-  )
-
-  // ------------------------------------------------------------------
-  // 7. Compute and insert new player_semester_scores
-  // ------------------------------------------------------------------
-
-  // Fetch all tournament IDs for this semester
-  const semesterTournamentIds = (tournaments as { id: string }[]).map((t) => t.id)
-
-  if (semesterTournamentIds.length === 0) {
-    // No tournaments — nothing to aggregate
-    return
+  const scoreGroups = new Map<number, string[]>()
+  for (const [id, score] of resultScoreMap) {
+    let ids = scoreGroups.get(score)
+    if (!ids) {
+      ids = []
+      scoreGroups.set(score, ids)
+    }
+    ids.push(id)
   }
 
-  // Fetch all tournament_results for Elon players in this semester's tournaments
-  const allResults = throwIfError(
-    await adminClient
-      .from('tournament_results')
-      .select('player_id, score')
-      .in('tournament_id', semesterTournamentIds),
-    'fetch all results for aggregation',
-  )
+  // ------------------------------------------------------------------
+  // 6. Parallel: update ALL tournament weights + ALL result scores
+  // ------------------------------------------------------------------
+  const updatePromises: PromiseLike<unknown>[] = []
 
-  const typedAllResults = allResults as { player_id: string; score: number }[]
+  for (const { id, weight, elonCount } of tournamentWeightData) {
+    updatePromises.push(
+      adminClient
+        .from('tournaments')
+        .update({ weight, elon_participants: elonCount })
+        .eq('id', id)
+        .then((res) => throwIfError(res, `update tournament ${id} weight`)),
+    )
+  }
 
-  // Aggregate per Elon player
+  for (const [score, ids] of scoreGroups) {
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500)
+      updatePromises.push(
+        adminClient
+          .from('tournament_results')
+          .update({ score })
+          .in('id', chunk)
+          .then((res) => throwIfError(res, 'batch update scores')),
+      )
+    }
+  }
+
+  await Promise.all(updatePromises)
+
+  // ------------------------------------------------------------------
+  // 7. Compute semester scores from in-memory data (no re-fetch)
+  // ------------------------------------------------------------------
   const playerAggregates = new Map<
     string,
     { totalScore: number; tournamentCount: number }
   >()
 
-  for (const result of typedAllResults) {
-    // Only aggregate for Elon students
-    if (!elonPlayerIds.has(result.player_id)) continue
-
-    const existing = playerAggregates.get(result.player_id)
-    if (existing) {
-      existing.totalScore += Number(result.score)
-      existing.tournamentCount += 1
-    } else {
-      playerAggregates.set(result.player_id, {
-        totalScore: Number(result.score),
-        tournamentCount: 1,
-      })
+  for (const results of resultsByTournament.values()) {
+    for (const r of results) {
+      if (!elonPlayerIds.has(r.player_id)) continue
+      const score = resultScoreMap.get(r.id) ?? 0
+      const existing = playerAggregates.get(r.player_id)
+      if (existing) {
+        existing.totalScore += score
+        existing.tournamentCount += 1
+      } else {
+        playerAggregates.set(r.player_id, {
+          totalScore: score,
+          tournamentCount: 1,
+        })
+      }
     }
   }
 
-  // Build rows to insert
   const scoreRows = Array.from(playerAggregates.entries()).map(
     ([playerId, agg]) => ({
       player_id: playerId,
       semester_id: semesterId,
       total_score: agg.totalScore,
       tournament_count: agg.tournamentCount,
-      average_score: computeAverageScore(agg.totalScore, agg.tournamentCount),
+      average_score:
+        agg.tournamentCount > 0 ? agg.totalScore / agg.tournamentCount : 0,
     }),
   )
 
-  if (scoreRows.length > 0) {
+  // ------------------------------------------------------------------
+  // 8. Parallel: upsert new scores + fetch existing (for stale detection)
+  // ------------------------------------------------------------------
+  const [, existingResult] = await Promise.all([
+    scoreRows.length > 0
+      ? adminClient
+          .from('player_semester_scores')
+          .upsert(scoreRows, { onConflict: 'player_id,semester_id' })
+          .then((res) => throwIfError(res, 'upsert player_semester_scores'))
+      : Promise.resolve(),
+    adminClient
+      .from('player_semester_scores')
+      .select('player_id')
+      .eq('semester_id', semesterId),
+  ])
+
+  // ------------------------------------------------------------------
+  // 9. Delete stale rows for players no longer in the computed set
+  // ------------------------------------------------------------------
+  const computedPlayerIds = new Set(scoreRows.map((r) => r.player_id))
+  const stalePlayerIds = (
+    (existingResult.data ?? []) as { player_id: string }[]
+  )
+    .map((r) => r.player_id)
+    .filter((pid) => !computedPlayerIds.has(pid))
+
+  if (stalePlayerIds.length > 0) {
     throwIfError(
       await adminClient
         .from('player_semester_scores')
-        .insert(scoreRows),
-      'insert player_semester_scores',
+        .delete()
+        .eq('semester_id', semesterId)
+        .in('player_id', stalePlayerIds),
+      'delete stale player_semester_scores',
     )
   }
 }

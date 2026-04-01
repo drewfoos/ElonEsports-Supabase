@@ -4,6 +4,72 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 
 ---
 
+## 2026-04-01 — Performance, Validation & Security Audit
+
+### Performance Optimizations
+
+**Scoring Engine (`src/lib/scoring.ts`) — Complete Rewrite**
+- Parallel batch operations: all tournament results fetched in parallel (one query per tournament to avoid Supabase's 1000-row default limit)
+- Batched score updates: results with same score value updated in single `WHERE id IN (...)` query (~30 queries instead of ~300)
+- Stale score cleanup: deletes leftover scores for players no longer marked Elon
+- NaN/Infinity guards on `computeWeight` and `computeScore`
+- Changed array type from `Promise[]` to `PromiseLike[]` for Supabase query compatibility
+
+**start.gg Import (`src/lib/actions/tournaments.ts`)**
+- Deferred sets import with `after()` from `next/server` — response returns in ~2-3s instead of 15-30s
+- Parallel semester lookup + duplicate check in `confirmTournamentImport`
+- Parallel players + semester fetch in `buildImportPreview`
+
+**start.gg Client (`src/lib/startgg.ts`)**
+- Standings perPage: 64 → 100 (fewer pages, stays under 1000-object complexity cap)
+- Sets perPage: 28 → 40
+- Inter-page delay: 750ms → 400ms
+
+**Admin Dashboard (`src/app/admin/page.tsx`)**
+- Replaced full row fetches with count-only queries (`{ count: 'exact', head: true }`)
+- 4 stat cards, recent tournaments list, quick actions
+- Uses inline Tailwind classes instead of `buttonVariants()` (server component compatibility)
+
+**Players Page (`src/app/admin/players/page.tsx`)**
+- Parallel semester loading with `Promise.all`
+- Optimistic Elon status toggle with revert-on-error
+- Fixed 1000-row limit bug with paginated tournament_results query
+
+**Tournaments Page (`src/app/admin/tournaments/new/page.tsx`)**
+- Lazy player loading: only fetches when Manual Entry tab is activated
+
+**Player Actions (`src/lib/actions/players.ts`)**
+- `deletePlayer`: parallel initial data collection, parallel participant decrements, parallel semester recalcs
+- `mergePlayers`: 6 queries consolidated to 1 parallel round, self-merge prevention
+- `getPlayersWithStatus`: paginated to handle >1000 tournament results
+
+**Semester Actions (`src/lib/actions/semesters.ts`)**
+- Parallel recalculations in `updateSemester`
+
+### Data Validation
+
+- All server actions trim and validate inputs (empty gamer tags, empty semester names)
+- Tournament creation validates: name required, date format YYYY-MM-DD, ≥1 participant, finite totalParticipants
+- Semester date validation: start must be before end (server + client)
+- start.gg import filters out standings with invalid placements
+- Empty gamer tags from start.gg fall back to "Unknown"
+- Scoring engine guards: `computeWeight` and `computeScore` return 0 for NaN/Infinity/negative inputs
+
+### Security
+
+- Case-insensitive email comparison at all 3 auth checkpoints (proxy, layout, `requireAdmin()`)
+- Migrated `src/middleware.ts` → `src/proxy.ts` (Next.js 16 convention)
+- Confirmed: RLS policies restrict public to read-only, all mutations use service role
+- Supabase config: email signups disabled, rate limits configured
+
+### New Files
+- `src/app/admin/recalculate-button.tsx` — Client component for manual score recalculation
+- `src/proxy.ts` — Replaces `src/middleware.ts` for Next.js 16
+- `src/components/ui/popover.tsx` — shadcn popover component
+- `src/components/ui/sheet.tsx` — shadcn sheet component (mobile nav)
+
+---
+
 ## 2026-04-01 — Full MVP Implementation
 
 ### What Was Built
@@ -49,23 +115,19 @@ All 4 milestones implemented in a single session:
 - `src/lib/actions/players.ts` — Player CRUD + merge + Elon status
 - `src/lib/actions/semesters.ts` — Semester CRUD
 - `src/lib/actions/tournaments.ts` — Tournament CRUD + start.gg import
-- `src/middleware.ts` — Admin route protection
+- `src/proxy.ts` — Admin route protection
 - `src/app/layout.tsx` — Root layout (dark theme, fonts, Toaster)
 - `src/app/page.tsx` — Public leaderboard
 - `src/app/login/page.tsx` — Admin login
 - `src/app/admin/layout.tsx` — Admin layout with sidebar
 - `src/app/admin/admin-nav.tsx` — Admin navigation (client component)
 - `src/app/admin/page.tsx` — Admin dashboard
+- `src/app/admin/recalculate-button.tsx` — Score recalc button
 - `src/app/admin/players/page.tsx` — Player management
 - `src/app/admin/semesters/page.tsx` — Semester management
 - `src/app/admin/tournaments/page.tsx` — Tournament list
 - `src/app/admin/tournaments/new/page.tsx` — Create/import tournament
 - `src/app/api/leaderboard/route.ts` — Public leaderboard API
-
-### Next Up
-- Apply `docs/schema.sql` in Supabase SQL Editor
-- Test locally with `npm run dev`
-- Deploy to Vercel
 
 ---
 
@@ -96,6 +158,3 @@ All 4 milestones implemented in a single session:
 | tournament_participants | tournament_results | Clarifies it holds results, not just attendance |
 | semester_scores | player_semester_scores | Clarifies these are per-player |
 | (new) | sets | Stores bracket/match data from start.gg for future use |
-
-### Next Up
-- Milestone 1: Scaffold Next.js project, set up Supabase clients, admin auth, player management

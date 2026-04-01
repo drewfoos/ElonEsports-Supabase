@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { usePathname } from 'next/navigation'
+import { signOut } from '@/lib/actions/auth'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
@@ -17,17 +17,15 @@ const navItems = [
 
 export function AdminNav({ userEmail }: { userEmail: string }) {
   const pathname = usePathname()
-  const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
   async function handleLogout() {
     setLoggingOut(true)
     try {
-      const supabase = createClient()
-      await supabase.auth.signOut()
-      router.push('/login')
+      await signOut()
     } catch {
+      // signOut redirects — this catch only fires on unexpected errors
       setLoggingOut(false)
     }
   }

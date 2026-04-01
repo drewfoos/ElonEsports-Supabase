@@ -26,6 +26,50 @@ export async function getPlayersWithStatus(
 ): Promise<(Player & { is_elon_student: boolean })[] | { error: string }> {
   const supabase = await createClient()
 
+  // First, find player IDs who actually participated in this semester's tournaments
+  const { data: tournaments, error: tournamentsError } = await supabase
+    .from('tournaments')
+    .select('id')
+    .eq('semester_id', semesterId)
+
+  if (tournamentsError) {
+    return { error: tournamentsError.message }
+  }
+
+  const tournamentIds = (tournaments ?? []).map((t) => t.id)
+
+  if (tournamentIds.length === 0) {
+    return [] // No tournaments this semester = no players to show
+  }
+
+  // Get distinct player IDs from tournament results (paginated to avoid 1000-row default limit)
+  const allPlayerIds: string[] = []
+  let from = 0
+  const PAGE = 1000
+  while (true) {
+    const { data: results, error: resultsError } = await supabase
+      .from('tournament_results')
+      .select('player_id')
+      .in('tournament_id', tournamentIds)
+      .range(from, from + PAGE - 1)
+
+    if (resultsError) {
+      return { error: resultsError.message }
+    }
+
+    if (!results || results.length === 0) break
+    allPlayerIds.push(...results.map((r) => r.player_id))
+    if (results.length < PAGE) break
+    from += PAGE
+  }
+
+  const participantIds = [...new Set(allPlayerIds)]
+
+  if (participantIds.length === 0) {
+    return []
+  }
+
+  // Fetch those players with their Elon status for this semester
   const { data, error } = await supabase
     .from('players')
     .select(`
@@ -34,6 +78,7 @@ export async function getPlayersWithStatus(
         is_elon_student
       )
     `)
+    .in('id', participantIds)
     .eq('player_semester_status.semester_id', semesterId)
     .order('gamer_tag')
 
@@ -68,9 +113,14 @@ export async function createPlayer(
   await requireAdmin()
   const supabase = createAdminClient()
 
+  const trimmed = gamerTag.trim()
+  if (!trimmed) {
+    return { error: 'Gamer tag cannot be empty.' }
+  }
+
   const { data, error } = await supabase
     .from('players')
-    .insert({ gamer_tag: gamerTag })
+    .insert({ gamer_tag: trimmed })
     .select()
     .single()
 
@@ -89,9 +139,14 @@ export async function updatePlayer(
   await requireAdmin()
   const supabase = createAdminClient()
 
+  const trimmed = gamerTag.trim()
+  if (!trimmed) {
+    return { error: 'Gamer tag cannot be empty.' }
+  }
+
   const { data, error } = await supabase
     .from('players')
-    .update({ gamer_tag: gamerTag })
+    .update({ gamer_tag: trimmed })
     .eq('id', id)
     .select()
     .single()
@@ -110,6 +165,28 @@ export async function deletePlayer(
   await requireAdmin()
   const supabase = createAdminClient()
 
+  // Parallel: collect affected data BEFORE deleting (FK cascade will remove results)
+  const affectedSemesterIds = new Set<string>()
+
+  const [statusesRes, resultsRes] = await Promise.all([
+    supabase.from('player_semester_status').select('semester_id').eq('player_id', id),
+    supabase.from('tournament_results').select('tournament_id').eq('player_id', id),
+  ])
+
+  for (const s of statusesRes.data ?? []) affectedSemesterIds.add(s.semester_id)
+
+  const affectedTournamentIds = resultsRes.data?.length
+    ? [...new Set(resultsRes.data.map(r => r.tournament_id))]
+    : []
+
+  if (affectedTournamentIds.length > 0) {
+    const { data: tournaments } = await supabase
+      .from('tournaments')
+      .select('semester_id')
+      .in('id', affectedTournamentIds)
+    for (const t of tournaments ?? []) affectedSemesterIds.add(t.semester_id)
+  }
+
   const { error } = await supabase
     .from('players')
     .delete()
@@ -118,6 +195,30 @@ export async function deletePlayer(
   if (error) {
     return { error: error.message }
   }
+
+  // Parallel: decrement total_participants for each affected tournament
+  if (affectedTournamentIds.length > 0) {
+    await Promise.all(
+      affectedTournamentIds.map(async (tournamentId) => {
+        const { data: tournament } = await supabase
+          .from('tournaments')
+          .select('total_participants')
+          .eq('id', tournamentId)
+          .single()
+        if (tournament && tournament.total_participants > 0) {
+          await supabase
+            .from('tournaments')
+            .update({ total_participants: tournament.total_participants - 1 })
+            .eq('id', tournamentId)
+        }
+      })
+    )
+  }
+
+  // Parallel: recalculate all affected semesters
+  await Promise.all(
+    [...affectedSemesterIds].map(semId => recalculateSemester(semId, supabase))
+  )
 
   revalidatePath('/admin/players')
   return { success: true }
@@ -152,43 +253,116 @@ export async function updatePlayerElonStatus(
   return { success: true }
 }
 
+export async function getPlayersWithTournamentCount(): Promise<
+  (Player & { tournament_count: number })[] | { error: string }
+> {
+  const supabase = await createClient()
+
+  // Use Supabase aggregate join to get counts without loading all result rows
+  const { data, error } = await supabase
+    .from('players')
+    .select('*, tournament_results(count)')
+    .order('gamer_tag')
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  return (data ?? []).map((row) => {
+    const countArr = row.tournament_results as unknown as { count: number }[]
+    return {
+      id: row.id,
+      gamer_tag: row.gamer_tag,
+      startgg_player_ids: row.startgg_player_ids,
+      created_at: row.created_at,
+      tournament_count: countArr?.[0]?.count ?? 0,
+    }
+  })
+}
+
+export async function updatePlayerStartggIds(
+  playerId: string,
+  startggPlayerIds: string[]
+): Promise<{ success: true } | { error: string }> {
+  await requireAdmin()
+  const supabase = createAdminClient()
+
+  const { error } = await supabase
+    .from('players')
+    .update({ startgg_player_ids: startggPlayerIds })
+    .eq('id', playerId)
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath('/admin/players')
+  return { success: true }
+}
+
 export async function mergePlayers(
   keepId: string,
   mergeId: string
 ): Promise<{ success: true } | { error: string }> {
   await requireAdmin()
+
+  if (keepId === mergeId) {
+    return { error: 'Cannot merge a player into themselves.' }
+  }
+
   const supabase = createAdminClient()
 
-  // 1. Get all tournament_results for the player being merged away
-  const { data: mergeResults, error: mergeResultsError } = await supabase
-    .from('tournament_results')
-    .select('*')
-    .eq('player_id', mergeId)
+  // 1. Parallel: collect ALL data upfront (6 queries → 1 round trip)
+  const [
+    keepStatusesRes, mergeStatusesRes,
+    keepResultsRes, mergeResultsRes,
+    keepPlayerRes, mergePlayerRes,
+  ] = await Promise.all([
+    supabase.from('player_semester_status').select('semester_id').eq('player_id', keepId),
+    supabase.from('player_semester_status').select('*').eq('player_id', mergeId),
+    supabase.from('tournament_results').select('*').eq('player_id', keepId),
+    supabase.from('tournament_results').select('*').eq('player_id', mergeId),
+    supabase.from('players').select('startgg_player_ids').eq('id', keepId).single(),
+    supabase.from('players').select('startgg_player_ids').eq('id', mergeId).single(),
+  ])
 
-  if (mergeResultsError) {
-    return { error: mergeResultsError.message }
+  if (mergeStatusesRes.error) return { error: mergeStatusesRes.error.message }
+  if (mergeResultsRes.error) return { error: mergeResultsRes.error.message }
+  if (keepResultsRes.error) return { error: keepResultsRes.error.message }
+  if (keepPlayerRes.error) return { error: keepPlayerRes.error.message }
+  if (mergePlayerRes.error) return { error: mergePlayerRes.error.message }
+
+  const mergeStatuses = mergeStatusesRes.data ?? []
+  const mergeResults = mergeResultsRes.data ?? []
+  const keepResults = keepResultsRes.data ?? []
+
+  // Derive affected semester IDs from pre-fetched data
+  const affectedSemesterIds = new Set<string>()
+  for (const s of keepStatusesRes.data ?? []) affectedSemesterIds.add(s.semester_id)
+  for (const s of mergeStatuses) affectedSemesterIds.add(s.semester_id)
+
+  const allTournamentIds = [
+    ...keepResults.map(r => r.tournament_id),
+    ...mergeResults.map(r => r.tournament_id),
+  ]
+  if (allTournamentIds.length > 0) {
+    const { data: tournamentSemesters } = await supabase
+      .from('tournaments')
+      .select('semester_id')
+      .in('id', [...new Set(allTournamentIds)])
+    for (const t of tournamentSemesters ?? []) affectedSemesterIds.add(t.semester_id)
   }
 
-  // 2. Get all tournament_results for the player being kept
-  const { data: keepResults, error: keepResultsError } = await supabase
-    .from('tournament_results')
-    .select('*')
-    .eq('player_id', keepId)
-
-  if (keepResultsError) {
-    return { error: keepResultsError.message }
-  }
-
-  // Build a map of keepId's results by tournament_id for quick lookup
+  // 2. Build a map of keepId's results by tournament_id for quick lookup
   const keepResultsByTournament = new Map<string, { id: string; placement: number }>(
-    (keepResults ?? []).map((r) => [
+    keepResults.map((r) => [
       r.tournament_id,
       { id: r.id, placement: r.placement },
     ])
   )
 
   // 3. Process each mergeId result
-  for (const mergeResult of mergeResults ?? []) {
+  for (const mergeResult of mergeResults) {
     const existing = keepResultsByTournament.get(mergeResult.tournament_id)
 
     if (existing) {
@@ -226,59 +400,48 @@ export async function mergePlayers(
     }
   }
 
-  // 4. Merge player_semester_status: upsert mergeId's statuses to keepId
-  const { data: mergeStatuses, error: mergeStatusError } = await supabase
-    .from('player_semester_status')
-    .select('*')
-    .eq('player_id', mergeId)
-
-  if (mergeStatusError) {
-    return { error: mergeStatusError.message }
-  }
-
+  // 4. Merge player_semester_status: prefer is_elon_student = true
   for (const status of mergeStatuses ?? []) {
-    // Upsert: if keepId already has a status for this semester, keep keepId's
-    // onConflict will do nothing if keepId already has an entry (insert is a no-op)
-    const { error: upsertError } = await supabase
-      .from('player_semester_status')
-      .upsert(
-        {
-          player_id: keepId,
-          semester_id: status.semester_id,
-          is_elon_student: status.is_elon_student,
-        },
-        { onConflict: 'player_id,semester_id', ignoreDuplicates: true }
-      )
+    // If merge-player is Elon, ensure keep-player is too
+    // If keep-player already has a row, only update if merge has is_elon=true
+    if (status.is_elon_student) {
+      const { error: upsertError } = await supabase
+        .from('player_semester_status')
+        .upsert(
+          {
+            player_id: keepId,
+            semester_id: status.semester_id,
+            is_elon_student: true,
+          },
+          { onConflict: 'player_id,semester_id' }
+        )
 
-    if (upsertError) {
-      return { error: upsertError.message }
+      if (upsertError) {
+        return { error: upsertError.message }
+      }
+    } else {
+      // merge-player is NOT Elon — only create a row if keep-player doesn't have one
+      const { error: upsertError } = await supabase
+        .from('player_semester_status')
+        .upsert(
+          {
+            player_id: keepId,
+            semester_id: status.semester_id,
+            is_elon_student: status.is_elon_student,
+          },
+          { onConflict: 'player_id,semester_id', ignoreDuplicates: true }
+        )
+
+      if (upsertError) {
+        return { error: upsertError.message }
+      }
     }
   }
 
-  // 5. Append mergeId's startgg_player_ids to keepId's array
-  const { data: keepPlayer, error: keepPlayerError } = await supabase
-    .from('players')
-    .select('startgg_player_ids')
-    .eq('id', keepId)
-    .single()
-
-  if (keepPlayerError) {
-    return { error: keepPlayerError.message }
-  }
-
-  const { data: mergePlayer, error: mergePlayerError } = await supabase
-    .from('players')
-    .select('startgg_player_ids')
-    .eq('id', mergeId)
-    .single()
-
-  if (mergePlayerError) {
-    return { error: mergePlayerError.message }
-  }
-
+  // 5. Merge startgg_player_ids (already fetched in step 1) + delete merged player
   const combinedIds = [
-    ...(keepPlayer.startgg_player_ids ?? []),
-    ...(mergePlayer.startgg_player_ids ?? []),
+    ...(keepPlayerRes.data.startgg_player_ids ?? []),
+    ...(mergePlayerRes.data.startgg_player_ids ?? []),
   ]
 
   const { error: updateIdsError } = await supabase
@@ -300,17 +463,10 @@ export async function mergePlayers(
     return { error: deletePlayerError.message }
   }
 
-  // Recalculate all semesters where either player had status
-  const { data: affectedStatuses } = await supabase
-    .from('player_semester_status')
-    .select('semester_id')
-    .eq('player_id', keepId)
-  const affectedSemesterIds = new Set(
-    (affectedStatuses ?? []).map((s: { semester_id: string }) => s.semester_id)
+  // Parallel: recalculate all affected semesters
+  await Promise.all(
+    [...affectedSemesterIds].map(semId => recalculateSemester(semId, supabase))
   )
-  for (const semId of affectedSemesterIds) {
-    await recalculateSemester(semId, supabase)
-  }
 
   revalidatePath('/admin/players')
   return { success: true }

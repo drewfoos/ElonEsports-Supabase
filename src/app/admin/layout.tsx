@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { AdminNav } from './admin-nav'
 
@@ -9,13 +10,17 @@ export default async function AdminLayout({
   const supabase = await createClient()
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser()
 
-  const userEmail = user?.email ?? 'Admin'
+  // Server-side auth guard — defense in depth alongside the proxy
+  if (error || !user || user.email?.toLowerCase() !== process.env.ADMIN_EMAIL?.toLowerCase()) {
+    redirect('/login')
+  }
 
   return (
     <div className="flex min-h-screen bg-background">
-      <AdminNav userEmail={userEmail} />
+      <AdminNav userEmail={user.email!} />
       <main className="flex-1 overflow-auto">
         {/* Spacer for mobile top bar */}
         <div className="h-14 md:hidden" />

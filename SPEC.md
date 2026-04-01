@@ -27,23 +27,32 @@ This is a **weighted average placement** system. NOT ELO. **Lower score = better
 ### Formula
 
 ```
-tournament_weight = (elon_participants / total_participants) / total_elon_students_in_semester
+tournament_weight = elon_participants / total_participants
 player_score      = placement × tournament_weight
 average_score     = sum(all tournament scores) / tournament_count
 ```
 
 Rankings sorted by `average_score` **ascending** — lowest = Rank 1.
 
+### Why This Formula Works
+
+The Elon ratio (`elon/total`) captures competition difficulty:
+- **Elon-only weekly** (10/11 = 0.91): high weight → placements count a lot
+- **NC local** (5/35 = 0.14): low weight → even mid-pack placements produce good scores
+- **Major regional** (5/500 = 0.01): very low weight → just showing up is rewarded
+
+This means 1st at a local (score 0.14) is **much better** than 1st at a weekly (score 0.91). And placing 200th at a 500-person major (score 2.0) is comparable to 2nd at a weekly — which is fair given the competition level.
+
+All tournaments count toward the average — no cherry-picking. The weight formula already adjusts for difficulty, so bombing a local (20th × 0.14 = 2.86) is comparable to placing 3rd at a weekly (3 × 0.91 = 2.73).
+
 ### Key Mechanics
 
 - Rankings **reset every semester** — nothing carries over
 - Elon student status is **per-semester** — same person can be Elon one semester, not the next
 - Non-Elon participants exist in tournaments — they affect `total_participants` (weight denominator) but don't get ranked
-- **Full recalculation** on any data change:
-  - Tournament added, modified, or deleted
-  - Player's Elon status changed
-  - Player merge completed
-- Adding a non-participating Elon student changes everyone's scores (changes `total_elon_students` denominator)
+- **Tournament weights are stable** — only depend on that tournament's participant mix, not global state
+- Recalculation on: tournament CRUD, Elon status change, player merge/delete
+- Toggling Elon status recalculates affected tournaments only (not the entire semester's weights)
 
 ### Display
 
@@ -54,18 +63,16 @@ Rankings sorted by `average_score` **ascending** — lowest = Rank 1.
 
 ### Worked Example
 
-10 Elon students in the semester.
+**Tournament A:** 35 entrants (NC local), 5 Elon → weight = 5/35 = 0.143
+**Tournament B:** 11 entrants (Elon weekly), 10 Elon → weight = 10/11 = 0.909
+**Tournament C:** 500 entrants (major), 5 Elon → weight = 5/500 = 0.01
 
-**Tournament A:** 32 entrants, 5 Elon → weight = (5/32)/10 = 0.015625
-**Tournament B:** 16 entrants, 8 Elon → weight = (8/16)/10 = 0.05
-
-Player X places 1st in A, 3rd in B:
+Player X places 5th in A, 2nd in B, 150th in C:
 ```
-Score A      = 1 × 0.015625 = 0.015625
-Score B      = 3 × 0.05     = 0.15
-totalScore   = 0.165625
-tournaments  = 2
-averageScore = 0.0828
+Score A = 5 × 0.143  = 0.714
+Score B = 2 × 0.909  = 1.818
+Score C = 150 × 0.01 = 1.500
+average = (0.714 + 1.818 + 1.500) / 3 = 1.344
 ```
 
 ---

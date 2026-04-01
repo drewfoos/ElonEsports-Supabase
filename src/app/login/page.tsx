@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,16 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // Redirect to admin if already logged in
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        router.replace('/admin')
+      }
+    })
+  }, [router])
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
@@ -37,6 +47,9 @@ export default function LoginPage() {
         return
       }
 
+      // refresh() ensures the server picks up the new auth cookies
+      // before navigating to the admin layout's server-side auth check
+      router.refresh()
       router.push('/admin')
     } catch {
       setError('An unexpected error occurred. Please try again.')

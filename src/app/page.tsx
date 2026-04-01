@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Select,
@@ -28,6 +29,15 @@ export default function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [semestersLoading, setSemestersLoading] = useState(true)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  // Check auth state on mount
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsLoggedIn(!!session)
+    })
+  }, [])
 
   // Fetch semesters on mount
   useEffect(() => {
@@ -106,10 +116,10 @@ export default function LeaderboardPage() {
             </Badge>
           </div>
           <a
-            href="/login"
+            href={isLoggedIn ? '/admin' : '/login'}
             className="text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
-            Login
+            {isLoggedIn ? 'Admin' : 'Login'}
           </a>
         </div>
       </header>
@@ -139,11 +149,13 @@ export default function LeaderboardPage() {
                 onValueChange={(val) => setSelectedSemesterId(val as string)}
               >
                 <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Select semester" />
+                  <SelectValue placeholder="Select semester">
+                    {semesters.find((s) => s.id === selectedSemesterId)?.name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {semesters.map((sem) => (
-                    <SelectItem key={sem.id} value={sem.id}>
+                    <SelectItem key={sem.id} value={sem.id} label={sem.name}>
                       {sem.name}
                     </SelectItem>
                   ))}
@@ -263,7 +275,7 @@ export default function LeaderboardPage() {
                         {entry.gamer_tag}
                       </TableCell>
                       <TableCell className="text-right font-mono text-muted-foreground">
-                        {entry.average_score.toFixed(6)}
+                        {entry.average_score.toFixed(3)}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
                         {entry.tournament_count}
@@ -315,7 +327,7 @@ function PodiumCard({
         {entry.gamer_tag}
       </span>
       <span className="mt-1 font-mono text-xs text-muted-foreground">
-        {entry.average_score.toFixed(6)}
+        {entry.average_score.toFixed(3)}
       </span>
     </div>
   )

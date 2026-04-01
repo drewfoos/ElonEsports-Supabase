@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useRouter } from 'next/navigation'
 import {
   createTournament,
-  importFromStartgg,
-  importFromStartggWithEvent,
+  fetchStartggEvents,
+  loadEventPreview,
   confirmTournamentImport,
 } from '@/lib/actions/tournaments'
 import { getPlayers } from '@/lib/actions/players'
@@ -328,6 +329,77 @@ function ManualEntryTab({ players }: { players: Player[] }) {
 }
 
 // ---------------------------------------------------------------------------
+// Virtualized standings preview (handles 500+ rows)
+// ---------------------------------------------------------------------------
+
+function StandingsPreview({
+  standings,
+  elonFlags,
+  onToggleElon,
+}: {
+  standings: ImportPreview['standings']
+  elonFlags: Record<string, boolean>
+  onToggleElon: (key: string) => void
+}) {
+  const parentRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: standings.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 44,
+    overscan: 20,
+  })
+
+  return (
+    <div className="rounded-md border">
+      {/* Header */}
+      <div className="flex border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+        <div className="w-[60px]">Place</div>
+        <div className="flex-1">Gamer Tag</div>
+        <div className="w-[80px] text-center">Match</div>
+        <div className="w-[80px] text-center">Elon</div>
+      </div>
+      {/* Virtualized rows */}
+      <div ref={parentRef} className="max-h-[50vh] overflow-y-auto">
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const s = standings[virtualRow.index]
+            return (
+              <div
+                key={s.key}
+                className="absolute left-0 flex w-full items-center border-b px-3 py-2 text-sm last:border-b-0"
+                style={{
+                  height: virtualRow.size,
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                <div className="w-[60px] font-mono text-muted-foreground">{s.placement}</div>
+                <div className="flex-1 truncate font-medium">{s.gamerTag}</div>
+                <div className="w-[80px] text-center">
+                  {s.existingPlayerId ? (
+                    <Badge variant="secondary" className="text-xs">Existing</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-xs">New</Badge>
+                  )}
+                </div>
+                <div className="w-[80px] flex justify-center">
+                  <Switch
+                    checked={elonFlags[s.key] ?? false}
+                    onCheckedChange={() => onToggleElon(s.key)}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      <div className="border-t px-3 py-1.5 text-xs text-muted-foreground">
+        {standings.length} participants
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // start.gg Import Tab
 // ---------------------------------------------------------------------------
 
@@ -337,38 +409,60 @@ function StartggImportTab() {
   const [loading, setLoading] = useState(false)
   const [confirming, setConfirming] = useState(false)
 
-  // Event selection state (when multiple events found)
+  // Step 1: tournament name + event list
+  const [tournamentSlug, setTournamentSlug] = useState<string>('')
+  const [tournamentName, setTournamentName] = useState<string | null>(null)
+  const [tournamentStartAt, setTournamentStartAt] = useState<number | null>(null)
   const [events, setEvents] = useState<StartggEvent[] | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string>('')
 
-  // Preview state
+  // Step 2: preview
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [elonFlags, setElonFlags] = useState<Record<string, boolean>>({})
 
-  async function handlePreview() {
+  // Step 1: Fetch tournament events
+  async function handleFetchEvents() {
     if (!url.trim()) {
       toast.error('Enter a start.gg URL')
       return
     }
 
     setLoading(true)
+    setTournamentSlug('')
+    setTournamentName(null)
+    setTournamentStartAt(null)
     setEvents(null)
+    setSelectedEventId('')
     setPreview(null)
     setElonFlags({})
 
     try {
-      const result = await importFromStartgg(url.trim())
+      const result = await fetchStartggEvents(url.trim())
 
       if ('error' in result) {
-        if (result.events && result.events.length > 0) {
-          // Multiple events — show picker
-          setEvents(result.events)
-          toast.info('Multiple events found. Please select one.')
-        } else {
-          toast.error(result.error)
+        toast.error(result.error)
+        return
+      }
+
+      setTournamentSlug(result.tournamentSlug)
+      setTournamentName(result.tournamentName)
+      setTournamentStartAt(result.startAt)
+      setEvents(result.events)
+
+      // Auto-select if event URL was pasted (e.g. /event/arcadian-singles)
+      if (result.suggestedEventSlug) {
+        const slugLower = result.suggestedEventSlug.toLowerCase()
+        const matched = result.events.find(
+          (ev) => ev.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === slugLower
+        )
+        if (matched) {
+          setSelectedEventId(String(matched.id))
         }
-      } else {
-        applyPreview(result.preview)
+      }
+
+      // Auto-select if only one event
+      if (result.events.length === 1) {
+        setSelectedEventId(String(result.events[0].id))
       }
     } catch {
       toast.error('Failed to fetch from start.gg')
@@ -377,24 +471,38 @@ function StartggImportTab() {
     }
   }
 
-  async function handleEventSelect() {
+  // Step 2: Load preview for selected event
+  async function handleLoadPreview() {
     if (!selectedEventId) {
       toast.error('Select an event')
       return
     }
 
+    const selectedEvent = events?.find(ev => String(ev.id) === selectedEventId)
+    if (!selectedEvent || !tournamentName || !tournamentSlug) {
+      toast.error('Missing tournament data')
+      return
+    }
+
     setLoading(true)
     try {
-      const result = await importFromStartggWithEvent(
-        url.trim(),
-        parseInt(selectedEventId, 10)
+      const result = await loadEventPreview(
+        tournamentSlug,
+        tournamentName,
+        tournamentStartAt,
+        selectedEvent
       )
 
       if ('error' in result) {
         toast.error(result.error)
       } else {
-        setEvents(null)
-        applyPreview(result.preview)
+        setPreview(result.preview)
+        // Initialize elon flags from the preview data, keyed by standing.key (startgg ID)
+        const flags: Record<string, boolean> = {}
+        for (const standing of result.preview.standings) {
+          flags[standing.key] = standing.isElonStudent
+        }
+        setElonFlags(flags)
       }
     } catch {
       toast.error('Failed to fetch event from start.gg')
@@ -403,20 +511,10 @@ function StartggImportTab() {
     }
   }
 
-  function applyPreview(p: ImportPreview) {
-    setPreview(p)
-    // Initialize elon flags from the preview data
-    const flags: Record<string, boolean> = {}
-    for (const standing of p.standings) {
-      flags[standing.gamerTag] = standing.isElonStudent
-    }
-    setElonFlags(flags)
-  }
-
-  function toggleElonFlag(gamerTag: string) {
+  function toggleElonFlag(key: string) {
     setElonFlags((prev) => ({
       ...prev,
-      [gamerTag]: !prev[gamerTag],
+      [key]: !prev[key],
     }))
   }
 
@@ -440,30 +538,42 @@ function StartggImportTab() {
     }
   }
 
+  function handleReset() {
+    setPreview(null)
+    setElonFlags({})
+    // Keep events visible so admin can pick another event from the same tournament
+  }
+
   return (
     <div className="space-y-6">
       {/* URL input */}
       <div className="space-y-2">
-        <Label htmlFor="startgg-url">start.gg Tournament URL</Label>
+        <Label htmlFor="startgg-url">start.gg URL</Label>
+        <p className="text-xs text-muted-foreground">
+          Paste a tournament link or a direct event link
+        </p>
         <div className="flex gap-3">
           <Input
             id="startgg-url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://www.start.gg/tournament/..."
+            placeholder="https://www.start.gg/tournament/... or .../event/..."
             className="flex-1"
           />
-          <Button onClick={handlePreview} disabled={loading}>
-            {loading ? 'Loading...' : 'Preview Import'}
+          <Button onClick={handleFetchEvents} disabled={loading}>
+            {loading && !events ? 'Loading...' : 'Fetch Events'}
           </Button>
         </div>
       </div>
 
-      {/* Event picker (when multiple events) */}
+      {/* Event picker — always shown when events are loaded */}
       {events && events.length > 0 && !preview && (
         <div className="space-y-3 rounded-md border p-4">
-          <p className="text-sm font-medium">
-            Multiple events found. Select the Smash Ultimate singles event:
+          {tournamentName && (
+            <h3 className="text-lg font-semibold">{tournamentName}</h3>
+          )}
+          <p className="text-sm text-muted-foreground">
+            {events.length} Smash Ultimate event{events.length !== 1 ? 's' : ''} found. Select one to import:
           </p>
           <div className="flex items-end gap-3">
             <div className="flex-1 space-y-2">
@@ -473,25 +583,30 @@ function StartggImportTab() {
                 onValueChange={(val) => { if (val) setSelectedEventId(val) }}
               >
                 <SelectTrigger id="event-select">
-                  <SelectValue placeholder="Choose event" />
+                  <SelectValue placeholder="Choose event">
+                    {(() => {
+                      const ev = events?.find((e) => String(e.id) === selectedEventId)
+                      return ev ? `${ev.name} (${ev.numEntrants} entrants)` : undefined
+                    })()}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {events.map((ev) => (
-                    <SelectItem key={ev.id} value={String(ev.id)}>
+                    <SelectItem key={ev.id} value={String(ev.id)} label={`${ev.name} (${ev.numEntrants} entrants)`}>
                       {ev.name} ({ev.numEntrants} entrants)
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={handleEventSelect} disabled={loading}>
-              {loading ? 'Loading...' : 'Load Event'}
+            <Button onClick={handleLoadPreview} disabled={loading || !selectedEventId}>
+              {loading ? 'Loading...' : 'Load Standings'}
             </Button>
           </div>
         </div>
       )}
 
-      {/* Loading indicator for slow imports */}
+      {/* Loading indicator */}
       {loading && (
         <div className="flex items-center justify-center py-8 text-muted-foreground">
           Fetching data from start.gg (this may take a moment)...
@@ -510,58 +625,18 @@ function StartggImportTab() {
             </div>
           </div>
 
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[70px]">Place</TableHead>
-                  <TableHead>Gamer Tag</TableHead>
-                  <TableHead>Matched Player</TableHead>
-                  <TableHead className="w-[100px] text-center">
-                    Elon Student
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {preview.standings.map((standing) => (
-                  <TableRow key={standing.gamerTag}>
-                    <TableCell className="font-mono">
-                      {standing.placement}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {standing.gamerTag}
-                    </TableCell>
-                    <TableCell>
-                      {standing.existingPlayerId ? (
-                        <Badge variant="secondary">Existing</Badge>
-                      ) : (
-                        <Badge variant="outline">New</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Switch
-                        checked={elonFlags[standing.gamerTag] ?? false}
-                        onCheckedChange={() =>
-                          toggleElonFlag(standing.gamerTag)
-                        }
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <StandingsPreview
+            standings={preview.standings}
+            elonFlags={elonFlags}
+            onToggleElon={toggleElonFlag}
+          />
 
           <div className="flex justify-end gap-3">
             <Button
               variant="outline"
-              onClick={() => {
-                setPreview(null)
-                setElonFlags({})
-                setEvents(null)
-              }}
+              onClick={handleReset}
             >
-              Cancel
+              Back to Events
             </Button>
             <Button onClick={handleConfirm} disabled={confirming}>
               {confirming ? 'Importing...' : 'Confirm Import'}
@@ -579,30 +654,33 @@ function StartggImportTab() {
 
 export default function NewTournamentPage() {
   const [players, setPlayers] = useState<Player[]>([])
-  const [loadingPlayers, setLoadingPlayers] = useState(true)
+  const [loadingPlayers, setLoadingPlayers] = useState(false)
+  const [playersLoaded, setPlayersLoaded] = useState(false)
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const data = await getPlayers()
-        if (!('error' in data)) setPlayers(data)
-      } catch {
-        toast.error('Failed to load players')
-      } finally {
-        setLoadingPlayers(false)
-      }
+  // Lazy-load players only when the manual tab is first activated
+  function handleTabChange(tab: string) {
+    if (tab === 'manual' && !playersLoaded) {
+      setLoadingPlayers(true)
+      getPlayers()
+        .then((data) => {
+          if (!('error' in data)) setPlayers(data)
+        })
+        .catch(() => toast.error('Failed to load players'))
+        .finally(() => {
+          setLoadingPlayers(false)
+          setPlayersLoaded(true)
+        })
     }
-    load()
-  }, [])
+  }
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">New Tournament</h1>
 
-      <Tabs defaultValue="manual">
+      <Tabs defaultValue="startgg" onValueChange={handleTabChange}>
         <TabsList>
-          <TabsTrigger value="manual">Manual Entry</TabsTrigger>
           <TabsTrigger value="startgg">start.gg Import</TabsTrigger>
+          <TabsTrigger value="manual">Manual Entry</TabsTrigger>
         </TabsList>
 
         <TabsContent value="manual" className="mt-6">

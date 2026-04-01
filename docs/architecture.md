@@ -12,7 +12,7 @@
 │  └──────┬───────┘  └──────┬───────┘                 │
 │         │                 │                         │
 │         │     ┌───────────┴───────────┐             │
-│         │     │    Admin Middleware    │             │
+│         │     │     Admin Proxy       │             │
 │         │     │ (session + email check)│             │
 │         │     └───────────┬───────────┘             │
 │         │                 │                         │
@@ -24,9 +24,8 @@
 │  ┌──────────────┴────────────────┐                  │
 │  │     Scoring Engine            │                  │
 │  │   /lib/scoring.ts             │                  │
-│  │   (pure functions, server     │                  │
-│  │    only, triggered on every   │                  │
-│  │    data mutation)             │                  │
+│  │   (parallel batch ops,        │                  │
+│  │    NaN/Infinity guards)       │                  │
 │  └──────────────┬────────────────┘                  │
 │                 │                                   │
 └─────────────────┼───────────────────────────────────┘
@@ -34,7 +33,7 @@
          ┌────────┴────────┐          ┌──────────────┐
          │    Supabase     │          │  start.gg    │
          │  (Postgres +    │          │  GraphQL API │
-         │   Auth)         │          │  (imports)   │
+         │   Auth + RLS)   │          │  (imports)   │
          └─────────────────┘          └──────────────┘
 ```
 
@@ -56,12 +55,13 @@ No auth. Reads precomputed scores — fast, no recalculation.
 
 ```
 Admin → POST createTournament server action
-     → Verify session + ADMIN_EMAIL
+     → Verify session + ADMIN_EMAIL (case-insensitive)
+     → Validate: name required, date YYYY-MM-DD, ≥1 participant
      → Determine semester from tournament date
      → Insert tournament + tournament_results rows
      → Call recalculateSemester(semesterId)
        → Count totalElonStudents for semester
-       → For each tournament: compute weight, update scores
+       → Parallel: compute weights + update scores for all tournaments
        → Wipe + rewrite player_semester_scores
      → Return success
 ```
@@ -75,16 +75,18 @@ Admin → POST importFromStartgg(url)
      → Extract tournament slug from URL (regex: /start\.gg\/tournament\/([^/]+)/)
      → Query TournamentEvents (slug + videogameId [1386])
      → Auto-detect singles event (1 result → use it, else match "singles" in name)
-     → Query EventStandings paginated (perPage 64)
+     → Query EventStandings paginated (perPage 100)
        → For each standing: extract placement, Player.id, gamerTag
-     → Optionally query EventSets paginated → collect set data
+       → Filter out invalid placements before returning
      → Return preview to admin
 
 Admin → POST confirmTournamentImport(data)
+     → Parallel: match players + lookup semester + check duplicates
      → Match players: startgg_player_id array match first, then gamerTag, else create new
      → Admin flags which are Elon students
-     → Insert tournament + tournament_results + sets
-     → Call recalculateSemester(semesterId)
+     → Insert tournament + tournament_results
+     → Respond to client immediately
+     → after(): insert sets + recalculateSemester (deferred, non-blocking)
      → Return success
 ```
 
@@ -99,92 +101,120 @@ Admin → POST updatePlayerElonStatus(playerId, semesterId, isElon)
      → Return success
 ```
 
+UI uses optimistic toggle — switch flips instantly, reverts on error.
+
 ### Admin: Merge Players
 
 ```
 Admin → POST mergePlayers(keepId, mergeId)
      → Verify session + ADMIN_EMAIL
+     → Parallel: fetch all data upfront (6 queries in 1 round trip)
      → Reassign tournament_results: mergeId → keepId
        → If conflict (both in same tournament), keep better placement
      → Reassign player_semester_status: mergeId → keepId
-       → If conflict, keep keepId's status
+       → If conflict, prefer is_elon_student = true
      → Append mergeId's startgg_player_ids to keepId
      → Delete mergeId player record
-     → Recalculate all affected semesters
+     → Parallel: recalculate all affected semesters
      → Return success
 ```
+
+## Performance Optimizations
+
+### Scoring Engine (`/lib/scoring.ts`)
+
+- **Parallel batch operations** — fetches all tournament results in parallel (one query per tournament to avoid Supabase's 1000-row default limit), then processes all updates in parallel
+- **Batched score updates** — results with the same score value are updated in a single `WHERE id IN (...)` query, reducing ~300 individual UPDATEs to ~30 per tournament
+- **NaN/Infinity guards** — `computeWeight` and `computeScore` return 0 for invalid inputs (negative, NaN, Infinity)
+- **Stale score cleanup** — deletes leftover scores for players no longer Elon after recalc
+
+### start.gg Import
+
+- **Deferred sets import** — uses `after()` from `next/server` to insert sets and recalculate scores after the response is sent, reducing import time from ~15-30s to ~2-3s
+- **Optimized pagination** — standings at 100/page (~800 objects), sets at 40/page (~680 objects), staying under start.gg's 1000-object complexity cap
+- **400ms inter-page delay** — respects start.gg's 80 req/60s rate limit
+
+### Admin Pages
+
+- **Dashboard** — count-only queries with `{ count: 'exact', head: true }` (zero row data transferred)
+- **Players** — parallel semester loading, optimistic Elon toggle, paginated result queries
+- **Tournaments** — lazy player loading (only when Manual Entry tab is activated)
+- **Semesters** — client-side date validation to prevent unnecessary server round-trips
 
 ## Scoring Engine Detail
 
 Located in `/lib/scoring.ts`. Pure TypeScript functions, server-side only.
 
-### `recalculateSemester(semesterId)`
+### `recalculateSemester(semesterId, adminClient)`
 
 ```
-1. totalElonStudents = COUNT(*) FROM player_semester_status
+1. elonPlayerIds = SELECT player_id FROM player_semester_status
      WHERE semester_id = X AND is_elon_student = true
 
-2. IF totalElonStudents = 0, clear all scores and return early
+2. IF no Elon students, clear all scores and return early
 
-3. FOR EACH tournament in semester:
-     elonParticipants = COUNT of tournament_results
-       WHERE player is Elon student this semester
-     weight = (elonParticipants / totalParticipants) / totalElonStudents
-     UPDATE tournament SET weight = weight
+3. PARALLEL FOR EACH tournament in semester:
+     Fetch all tournament_results for this tournament
+     elonParticipants = COUNT of results WHERE player is Elon
+     weight = elonParticipants / totalParticipants (with NaN guards)
+     UPDATE tournament SET weight, elon_participants
 
-4. FOR EACH tournament_result WHERE player is Elon:
-     score = placement × tournament.weight
-     UPDATE tournament_result SET score = score
+4. PARALLEL: batch UPDATE tournament_results SET score
+     (grouped by score value for fewer queries)
 
 5. DELETE all player_semester_scores WHERE semester_id = X
 
-6. INSERT INTO player_semester_scores:
+6. UPSERT INTO player_semester_scores:
      FOR EACH Elon player with tournament_results:
-       total_score = SUM(score)
+       total_score = SUM(all scores)
        tournament_count = COUNT(tournament_results)
        average_score = total_score / tournament_count
+
+7. DELETE stale scores for players no longer marked Elon
 ```
 
-Uses Supabase service role key (bypasses RLS) for all writes.
-
-## File Structure (Planned)
+## File Structure
 
 ```
 src/
 ├── app/
-│   ├── layout.tsx              # Root layout
-│   ├── page.tsx                # Public leaderboard
+│   ├── layout.tsx                 # Root layout (dark theme, fonts, Toaster)
+│   ├── page.tsx                   # Public leaderboard with podium
 │   ├── login/
-│   │   └── page.tsx            # Admin login
+│   │   └── page.tsx               # Admin login (email/password)
 │   ├── admin/
-│   │   ├── layout.tsx          # Admin layout with nav
-│   │   ├── page.tsx            # Admin dashboard
+│   │   ├── layout.tsx             # Admin layout with sidebar nav
+│   │   ├── admin-nav.tsx          # Sidebar navigation (client component)
+│   │   ├── page.tsx               # Dashboard with stats + recent tournaments
+│   │   ├── recalculate-button.tsx # Score recalc trigger (client component)
 │   │   ├── players/
-│   │   │   └── page.tsx        # Player management
+│   │   │   └── page.tsx           # Player management (CRUD, merge, Elon toggle)
 │   │   ├── tournaments/
-│   │   │   ├── page.tsx        # Tournament list
+│   │   │   ├── page.tsx           # Tournament list with delete
 │   │   │   └── new/
-│   │   │       └── page.tsx    # Create/import tournament
+│   │   │       └── page.tsx       # Create/import tournament (manual + start.gg)
 │   │   └── semesters/
-│   │       └── page.tsx        # Semester management
+│   │       └── page.tsx           # Semester management (CRUD, date editing)
 │   └── api/
 │       └── leaderboard/
-│           └── route.ts        # Public leaderboard API
+│           └── route.ts           # Public leaderboard API (GET, no auth)
 ├── lib/
 │   ├── supabase/
-│   │   ├── client.ts           # Browser Supabase client
-│   │   ├── server.ts           # Server Supabase client
-│   │   └── admin.ts            # Service role client (for recalc)
-│   ├── scoring.ts              # Scoring engine (pure functions)
-│   ├── startgg.ts              # start.gg API client
+│   │   ├── client.ts              # Browser Supabase client
+│   │   ├── server.ts              # Server component Supabase client
+│   │   └── admin.ts               # Service role client (bypasses RLS)
+│   ├── scoring.ts                 # Scoring engine (parallel, batched, guarded)
+│   ├── startgg.ts                 # start.gg GraphQL API client
+│   ├── types.ts                   # TypeScript interfaces for all DB tables
+│   ├── utils.ts                   # Shared utilities (cn helper)
 │   └── actions/
-│       ├── players.ts          # Player server actions
-│       ├── tournaments.ts      # Tournament server actions
-│       └── semesters.ts        # Semester server actions
+│       ├── auth.ts                # requireAdmin() helper
+│       ├── players.ts             # Player server actions
+│       ├── tournaments.ts         # Tournament server actions
+│       └── semesters.ts           # Semester server actions
 ├── components/
-│   ├── ui/                     # shadcn/ui components
-│   └── ...                     # App-specific components
-└── middleware.ts                # Admin route protection
+│   └── ui/                        # shadcn/ui components
+└── proxy.ts                       # Admin route protection (Next.js 16 proxy)
 ```
 
 ## Supabase Client Strategy
@@ -194,3 +224,10 @@ src/
 | Browser client | Client components, auth state | Anon key |
 | Server client | Server components, reading data | Anon key + cookies |
 | Admin client | Recalculation, mutations | Service role key (bypasses RLS) |
+
+## Security
+
+- **Auth**: Single admin via `ADMIN_EMAIL` env var, case-insensitive email comparison at all 3 checkpoints (proxy, layout, server actions via `requireAdmin()`)
+- **RLS**: Public read on leaderboard data, all mutations use service role client (bypasses RLS)
+- **Input validation**: All server actions validate inputs (trimming, empty checks, date ranges, placement ranges)
+- **Supabase config**: Email signups disabled, rate limits configured, no public registration

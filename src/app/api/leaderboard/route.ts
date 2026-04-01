@@ -6,7 +6,8 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     let semesterId = searchParams.get('semester_id')
-    const minTournaments = parseInt(searchParams.get('min_tournaments') ?? '3', 10)
+    const rawMin = parseInt(searchParams.get('min_tournaments') ?? '3', 10)
+    const minTournaments = Number.isFinite(rawMin) && rawMin >= 1 ? Math.min(rawMin, 99) : 3
 
     const supabase = await createClient()
 
@@ -54,21 +55,33 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const entries: LeaderboardEntry[] = (data ?? []).map((row, index) => {
-      // Supabase returns the joined relation as an object (single relation) or array
+    // Standard competition ranking: ties get same rank, next rank skips
+    const rows = data ?? []
+    const entries: LeaderboardEntry[] = []
+    let currentRank = 1
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
       const playerData = row.players as unknown as { gamer_tag: string } | null
 
-      return {
-        rank: index + 1,
+      // If this player has a different score than the previous, update rank
+      if (i > 0 && row.average_score !== rows[i - 1].average_score) {
+        currentRank = i + 1
+      }
+
+      entries.push({
+        rank: currentRank,
         player_id: row.player_id,
         gamer_tag: playerData?.gamer_tag ?? 'Unknown',
         average_score: row.average_score,
         total_score: row.total_score,
         tournament_count: row.tournament_count,
-      }
-    })
+      })
+    }
 
-    return NextResponse.json(entries)
+    return NextResponse.json(entries, {
+      headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
+    })
   } catch {
     return NextResponse.json(
       { error: 'An unexpected error occurred' },

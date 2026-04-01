@@ -52,6 +52,7 @@ create table tournaments (
   date date not null,
   source text not null check (source in ('startgg', 'manual')),
   startgg_slug text,                     -- nullable, only for start.gg imports
+  startgg_event_id text,                 -- nullable, start.gg event ID for duplicate detection
   total_participants int not null default 0,
   elon_participants int not null default 0,
   weight numeric not null default 0,     -- computed during recalc
