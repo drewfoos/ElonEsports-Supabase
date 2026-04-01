@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://api.github.com/repos/drewfoos/ElonEsports/git/trees/main?recursive=1\")",
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(x['path']\\) for x in data.get\\('tree',[]\\)]\")",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:developer.start.gg)",
+      "WebFetch(domain:smashgg-schema.netlify.app)",
+      "Bash(python3:*)",
+      "Bash(node:*)",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm --turbopack)",
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(npm init:*)",
+      "Bash(rm:*)",
+      "Bash(curl -s \"https://developer.start.gg/docs/intro\")",
+      "Bash(curl -s \"https://developer.start.gg/docs/authentication\")",
+      "Bash(curl -s \"https://developer.start.gg/docs/examples/queries/tournaments\")",
+      "WebSearch",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.google.com)",
+      "Bash(curl -s \"https://api.start.gg/characters?videogameId=1386\")",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(git checkout:*)",
+      "Bash(cp:*)",
+      "Bash(cp temp-scaffold/package.json .)",
+      "Bash(cp temp-scaffold/package-lock.json .)",
+      "Bash(cp temp-scaffold/tsconfig.json .)",
+      "Bash(cp temp-scaffold/postcss.config.mjs .)",
+      "Bash(cp temp-scaffold/eslint.config.mjs .)",
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest init -d --yes)"
+    ]
+  }
+}
