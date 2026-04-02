@@ -307,9 +307,15 @@ export async function confirmTournamentImport(
     }
   }
 
-  // Parallel: semester lookup + duplicate check
-  const [semester, duplicateResult] = await Promise.all([
-    determineSemester(preview.tournamentDate),
+  // Parallel: semester lookup + duplicate check (reuse admin client, no extra cookies() call)
+  const [semesterResult, duplicateResult] = await Promise.all([
+    admin
+      .from('semesters')
+      .select('*')
+      .lte('start_date', preview.tournamentDate)
+      .gte('end_date', preview.tournamentDate)
+      .limit(1)
+      .maybeSingle(),
     preview.eventId
       ? admin
           .from('tournaments')
@@ -319,6 +325,7 @@ export async function confirmTournamentImport(
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ])
 
+  const semester = semesterResult.data as Semester | null
   if (!semester) {
     return { error: `No semester covers the tournament date ${preview.tournamentDate}. Create or adjust a semester first.` }
   }
