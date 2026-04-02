@@ -1,55 +1,74 @@
 # Elon Esports Smash PR
 
-A Super Smash Bros. Ultimate tournament tracker and public leaderboard for Elon University's esports club.
+A Super Smash Bros. Ultimate tournament tracker and public power rankings for Elon University's esports club.
 
-One admin manages players, imports tournaments from [start.gg](https://start.gg), and tracks Elon students across semesters. Everyone else sees the ranked leaderboard.
+One admin manages players, imports tournaments from [start.gg](https://start.gg), and tracks Elon students across semesters. Everyone else sees the live leaderboard.
 
-## How It Works
+## Scoring
 
-Players compete in tournaments (both Elon-only weeklies and open regionals). The system uses a **weighted average placement** formula — tournaments with more outside competition count less, so doing well at a stacked regional matters more than winning a small weekly.
+Players compete in tournaments — both Elon-only weeklies and open regionals. The system uses a **weighted average placement** formula where harder competition produces lower (better) scores:
 
 ```
-tournament_weight = elon_participants / total_participants
-player_score      = placement * tournament_weight
-average_score     = sum(all scores) / tournaments_played
+weight  = elon_participants / total_participants
+score   = placement * weight
+average = sum(scores) / tournaments_played
 ```
 
-**Lower average = higher rank.** Rankings require a minimum number of tournaments (default 3) to appear on the leaderboard.
+- Elon-only weekly (10/11 = 0.91 weight) — placements count a lot
+- Mixed local (5/35 = 0.14 weight) — rewards showing up against tougher fields
+- Major regional (5/500 = 0.01 weight) — even mid-pack is impressive
 
-## Stack
-
-- **Next.js 16** (App Router, Server Actions, React Server Components)
-- **Supabase** (Postgres, Auth, RLS)
-- **Tailwind CSS + shadcn/ui** (dark esports theme)
-- **Vercel** (deployment, serverless functions)
+**Lower average = higher rank.** A minimum tournament threshold (default 3) filters out one-time participants.
 
 ## Features
 
 ### Public Leaderboard
-- Semester selector and min-tournament filter
-- Top 3 podium with gold/silver/bronze styling
-- Rankings table sorted by average score
 
-### Admin Dashboard
-- Tournament and player stats at a glance
-- Recent tournament activity
-- Quick actions: import, manage players, recalculate scores
+- Animated podium with Trophy and Medal icons (Lucide), gradient glow effects, and bounce-in animations
+- Canvas fireworks celebration on load
+- Semester selector and min-tournament slider
+- Staggered row animations in the rankings table
+- Competition ranking (ties share the same rank)
 
-### Tournament Management
-- **start.gg import** — paste a tournament URL, auto-detect the Smash Ultimate singles event, preview standings, flag Elon students, confirm
-- **Manual entry** — add tournaments by hand with player picker and placements
-- Automatic semester assignment by tournament date
+### start.gg Import
+
+- Paste any start.gg tournament URL
+- Auto-detects Smash Ultimate singles events (blocks doubles/teams)
+- Preview standings with search, filter (All / Elon / Not Elon), and bulk toggle
+- Flag Elon students, confirm, and scores recalculate automatically
+- Set/bracket data imported in the background via deferred `after()` call
+
+### Manual Tournament Entry
+
+- Bracket format selector (single or double elimination) with auto-calculated placements
+- Virtualized player picker with inline "Create player" for unknowns
+- Drag-and-drop reordering with tier dividers and placement badges
+- Memoized components (`React.memo`, `useCallback`, `useMemo`) for smooth performance with large rosters
 
 ### Player Management
+
 - Add, edit, delete, search players
-- Toggle Elon student status per semester
-- Merge duplicate players (keeps best placement on conflicts, combines start.gg IDs)
+- Toggle Elon student status per semester (optimistic UI)
+- Merge duplicate players — keeps best placement on conflicts, combines start.gg IDs
 - Link multiple start.gg accounts to one player
 
 ### Semester Management
-- Create semesters with date ranges
+
+- Create semesters with date ranges (overlap validation prevents conflicts)
+- **Auto-create semesters** — tournaments for uncovered dates generate a semester based on academic calendar (Spring Jan-May, Summer May-Aug, Fall Aug-Dec)
 - Tournaments auto-reassign when semester dates change
 - Scores recalculate automatically on any data change
+
+## Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16 (App Router, Server Actions, RSC) |
+| Database | Supabase (Postgres, Auth, RLS) |
+| Styling | Tailwind CSS + shadcn/ui (dark theme) |
+| Icons | Lucide React |
+| Virtualization | @tanstack/react-virtual |
+| Deployment | Vercel |
 
 ## Getting Started
 
@@ -104,25 +123,24 @@ average_score     = sum(all scores) / tournaments_played
 ```
 src/
 ├── app/
-│   ├── page.tsx                   # Public leaderboard
+│   ├── page.tsx                   # Public leaderboard (fireworks, podium, table)
 │   ├── login/page.tsx             # Admin login
 │   ├── admin/                     # Admin pages (dashboard, players, tournaments, semesters)
 │   └── api/leaderboard/route.ts   # Public API endpoint
 ├── lib/
-│   ├── scoring.ts                 # Scoring engine
-│   ├── startgg.ts                 # start.gg API client
+│   ├── scoring.ts                 # Scoring engine (parallel, batched, guarded)
+│   ├── startgg.ts                 # start.gg GraphQL API client
+│   ├── types.ts                   # TypeScript interfaces
 │   ├── supabase/                  # Supabase clients (browser, server, admin)
 │   └── actions/                   # Server actions (players, tournaments, semesters)
-└── proxy.ts                       # Admin route protection
+└── proxy.ts                       # Admin route protection (Next.js 16)
 ```
-
-See [docs/architecture.md](docs/architecture.md) for detailed request flows and design decisions.
 
 ## Documentation
 
-- [SPEC.md](SPEC.md) — Product requirements and scoring formula
 - [docs/architecture.md](docs/architecture.md) — System design, request flows, performance notes
 - [docs/schema.sql](docs/schema.sql) — Database schema with RLS policies
 - [docs/startgg-api.md](docs/startgg-api.md) — start.gg GraphQL API reference
 - [docs/changelog.md](docs/changelog.md) — Development history and decisions
+- [SPEC.md](SPEC.md) — Product requirements and scoring formula
 - [SCORING_SYSTEM.md](SCORING_SYSTEM.md) — Analysis of the original scoring system

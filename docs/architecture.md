@@ -57,12 +57,13 @@ No auth. Reads precomputed scores — fast, no recalculation.
 Admin → POST createTournament server action
      → Verify session + ADMIN_EMAIL (case-insensitive)
      → Validate: name required, date YYYY-MM-DD, ≥1 participant
-     → Determine semester from tournament date
+     → findOrCreateSemester(date):
+       → Try existing semester lookup
+       → If none: auto-create based on academic calendar
+         (Spring Jan-May, Summer May-Aug, Fall Aug-Dec)
+       → Trim range if overlapping neighbors exist
      → Insert tournament + tournament_results rows
      → Call recalculateSemester(semesterId)
-       → Count totalElonStudents for semester
-       → Parallel: compute weights + update scores for all tournaments
-       → Wipe + rewrite player_semester_scores
      → Return success
 ```
 
@@ -81,7 +82,7 @@ Admin → POST importFromStartgg(url)
      → Return preview to admin
 
 Admin → POST confirmTournamentImport(data)
-     → Parallel: match players + lookup semester + check duplicates
+     → Parallel: findOrCreateSemester + check duplicates
      → Match players: startgg_player_id array match first, then gamerTag, else create new
      → Admin flags which are Elon students
      → Insert tournament + tournament_results
@@ -134,12 +135,26 @@ Admin → POST mergePlayers(keepId, mergeId)
 - **Optimized pagination** — standings at 100/page (~800 objects), sets at 40/page (~680 objects), staying under start.gg's 1000-object complexity cap
 - **400ms inter-page delay** — respects start.gg's 80 req/60s rate limit
 
+### Server Actions
+
+- **No redundant clients** — all admin actions reuse a single admin client rather than creating separate server + admin clients. Semester lookups query directly on the existing client instead of calling a helper that creates its own.
+- **Minimal column fetches** — semester lookups use `select('id')` instead of `select('*')` when only the ID is needed
+- **`.maybeSingle()` over `.single()`** — for optional lookups (semester by date, tournament by ID) to avoid PGRST116 error handling
+- **Parallel tournament reassignment** — `updateSemester` fetches all semesters once and runs all move operations in parallel instead of N+1 sequential queries
+- **Batch reuse** — `deletePlayer` reuses already-fetched tournament data for participant count decrements instead of re-querying each tournament
+
 ### Admin Pages
 
 - **Dashboard** — count-only queries with `{ count: 'exact', head: true }` (zero row data transferred)
 - **Players** — parallel semester loading, optimistic Elon toggle, paginated result queries
-- **Tournaments** — lazy player loading (only when Manual Entry tab is activated)
-- **Semesters** — client-side date validation to prevent unnecessary server round-trips
+- **Tournaments** — memoized components (`React.memo`, `useCallback`, `useMemo`), virtualized player picker, lazy player loading
+- **Semesters** — client-side date validation, overlap detection
+
+### Public Leaderboard
+
+- **Single semester query** — collapsed two sequential fallback queries into one sorted query with client-side pick
+- **Canvas fireworks** — particle system with gravity, glow trails, and staggered bursts; auto-cleans up after animation
+- **Staggered animations** — podium cards bounce in sequentially, table rows fade in with delay offsets
 
 ## Scoring Engine Detail
 

@@ -4,6 +4,39 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 
 ---
 
+## 2026-04-01 — Leaderboard Redesign, Auto-Semesters & Query Optimization
+
+### Leaderboard Redesign
+- Animated podium with Lucide `Trophy` (1st) and `Medal` (2nd/3rd) icons, gradient glows, and drop shadows
+- Canvas-based fireworks particle system — 8 staggered bursts with gravity, fade, and glow trails
+- Podium cards bounce in with `cubic-bezier` spring animation, medals pop in with rotate/scale
+- Staggered row fade-in animation for the rankings table
+- Gradient text on "Power Rankings" heading
+- Tournament count displayed on each podium card
+- Consistent Lucide icons in both podium and table (replacing OS-dependent emoji)
+
+### Auto-Create Semesters
+- `findOrCreateSemester(date, client)` — shared helper used by both manual entry and start.gg import
+- Academic calendar conventions: Spring (Jan 15 – May 15), Summer (May 16 – Aug 15), Fall (Aug 16 – Dec 20)
+- Trims auto-generated range to avoid overlapping existing semesters
+- Duplicate name detection with date-range suffix fallback
+- Added overlap validation to both `createSemester()` and `updateSemester()`
+
+### Query Optimization
+- **Eliminated N+1 queries in `updateSemester`** — fetches all semesters once + parallelizes all tournament move operations instead of querying per-tournament in a loop
+- **Removed redundant client creation** — `determineSemester()` (created server client via `cookies()`) replaced with direct queries on existing admin client in `createTournament` and `confirmTournamentImport`
+- **Removed dead `determineSemester()` function** — both callers now use `findOrCreateSemester`
+- **Reused batch-fetched data in `deletePlayer`** — added `total_participants` to initial tournament query instead of re-fetching each tournament individually
+- **Leaderboard fallback** — collapsed two sequential semester queries into one sorted query with client-side pick
+- **Minimal column fetches** — semester lookups use `select('id')` instead of `select('*')` in 3 places
+- **`.maybeSingle()` over `.single()`** — `getCurrentSemester`, `deleteTournament`, semester lookups (avoids PGRST116 error handling)
+
+### Dead Code Removal
+- Removed unused `PlayerSemesterScore` and `GameSet` interfaces from `types.ts`
+- Removed unused `Semester` import from `tournaments.ts`
+
+---
+
 ## 2026-04-01 — Performance, Validation & Security Audit
 
 ### Performance Optimizations
