@@ -87,13 +87,25 @@ export async function recalculateSemester(
   })
 
   if (!lockAcquired) {
-    // Another recalculation is already in progress for this semester
-    return
+    // Another recalculation is in progress. Wait for it to likely finish,
+    // then retry once — our caller may have inserted new data that the
+    // concurrent recalc started too early to include.
+    await new Promise((r) => setTimeout(r, 3000))
+    const { data: retryLock } = await adminClient.rpc('acquire_semester_lock', {
+      p_semester_id: semesterId,
+    })
+    if (!retryLock) {
+      // Still locked — bust caches so the next page load gets fresh data
+      // once the in-progress recalc finishes.
+      updateTag('leaderboard-data')
+      updateTag('players-list')
+      updateTag('player-profile')
+      return
+    }
   }
 
   try {
     await _recalculateSemesterInner(semesterId, adminClient)
-    // Bust public page caches after scores change
     updateTag('leaderboard-data')
     updateTag('players-list')
     updateTag('player-profile')
@@ -283,21 +295,24 @@ async function _recalculateSemesterInner(
   )
 
   // ------------------------------------------------------------------
-  // 8. Parallel: upsert new scores + fetch existing (for stale detection)
+  // 8. Upsert new scores, then fetch existing (sequential to avoid race)
   // ------------------------------------------------------------------
-  const [, existingResult] = await Promise.all([
-    scoreRows.length > 0
-      ? adminClient
-          .from('player_semester_scores')
-          .upsert(scoreRows, { onConflict: 'player_id,semester_id' })
-          .then((res) => throwIfError(res, 'upsert player_semester_scores'))
-      : Promise.resolve(),
-    adminClient
+  if (scoreRows.length > 0) {
+    throwIfError(
+      await adminClient
+        .from('player_semester_scores')
+        .upsert(scoreRows, { onConflict: 'player_id,semester_id' }),
+      'upsert player_semester_scores',
+    )
+  }
+
+  const existingResult = throwIfError(
+    await adminClient
       .from('player_semester_scores')
       .select('player_id')
-      .eq('semester_id', semesterId)
-      .then((res) => throwIfError(res, 'fetch existing scores for stale detection')),
-  ])
+      .eq('semester_id', semesterId),
+    'fetch existing scores for stale detection',
+  )
 
   // ------------------------------------------------------------------
   // 9. Delete stale rows for players no longer in the computed set
