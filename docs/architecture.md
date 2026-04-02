@@ -25,7 +25,15 @@
 │  │     Scoring Engine            │                  │
 │  │   /lib/scoring.ts             │                  │
 │  │   (parallel batch ops,        │                  │
-│  │    NaN/Infinity guards)       │                  │
+│  │    NaN/Infinity guards,       │                  │
+│  │    advisory lock retry)       │                  │
+│  └──────────────┬────────────────┘                  │
+│                 │                                   │
+│  ┌──────────────┴────────────────┐                  │
+│  │     Caching Layer             │                  │
+│  │   unstable_cache (60s TTL)    │                  │
+│  │   + updateTag invalidation    │                  │
+│  │   + rate-limited refresh      │                  │
 │  └──────────────┬────────────────┘                  │
 │                 │                                   │
 └─────────────────┼───────────────────────────────────┘
@@ -43,13 +51,14 @@
 
 ```
 Browser → GET /api/leaderboard?semester_id=X&min_tournaments=3
+       → unstable_cache (tag: 'leaderboard-data', 60s TTL)
        → Query player_semester_scores (precomputed)
        → Join with players for gamer_tag
        → Filter by tournament_count >= min_tournaments
        → Return sorted by average_score ASC
 ```
 
-No auth. Reads precomputed scores — fast, no recalculation.
+No auth. Reads precomputed scores via `unstable_cache`. Cache invalidated by `updateTag('leaderboard-data')` on any score recalculation or manual refresh (15s server-enforced cooldown per IP).
 
 ### Admin: Add Tournament (Manual)
 
@@ -96,15 +105,18 @@ Admin → POST confirmTournamentImport(data)
 
 ```
 Browser → GET /players/[playerId]
+       → unstable_cache (tag: 'player-profile', 60s TTL)
        → Server Component: getPlayerProfile(playerId)
        → Batch 1 (parallel): player info + Elon status check
        → If not Elon → notFound()
        → Batch 2 (parallel): semester scores, tournament results, set wins, set losses
        → Batch 3 (parallel): rank computation (all scores per semester) + opponent tags
+       → Compute aggregates server-side (totalSets, totalWins, winPct)
+       → Pre-reverse arrays (semesterScores, tournamentResults) for client
        → Return profile with trend data, h2h, tournament history
 ```
 
-3 sequential DB batches (down from 4). Rank computation requires batch 2 results (semester IDs), opponent tags require batch 2 results (h2h map), so batch 3 runs both in parallel.
+3 sequential DB batches (down from 4). Aggregates and array ordering computed server-side to avoid client recomputation on re-renders.
 
 ### Admin: Change Elon Status
 
@@ -170,17 +182,21 @@ Admin → POST mergePlayers(keepId, mergeId)
 
 ### Public Leaderboard
 
+- **ISR caching** — `unstable_cache` with `leaderboard-data` tag and 60s TTL on both SSR page and API route; `updateTag` invalidates both simultaneously
 - **Server-side rendering** — page.tsx is a Server Component that fetches semesters, auth state, and initial leaderboard data in parallel (zero client waterfalls on first load)
 - **Client interactivity** — semester picker, min tournaments slider, and fireworks extracted to `leaderboard-client.tsx`; subsequent filter changes fetch via `/api/leaderboard`
+- **Direct fetch handlers** — semester/slider changes call fetch directly from handlers (no `useEffect`/`useCallback` chain), eliminating double-renders
+- **Debounced slider** — 300ms debounce on min-tournaments slider prevents API request per drag tick
 - **Single semester query** — collapsed two sequential fallback queries into one sorted query with client-side pick
-- **Canvas fireworks** — particle system with gravity, glow trails, and staggered bursts; auto-cleans up after animation
+- **Canvas fireworks** — particle system with gravity, glow trails, and staggered bursts; swap-and-pop O(1) particle removal; animation loop stops when all particles are gone
 - **Staggered animations** — podium cards bounce in sequentially, table rows fade in with delay offsets
-- **HeroGeometric** — framer-motion animated floating shapes shared by leaderboard and players pages
+- **HeroGeometric** — `LazyMotion` + `domAnimation` (~5KB vs ~32KB gzipped); `fadeUpVariants` hoisted to module scope
+- **Cache refresh** — "Updated Xs ago" display with refresh button; 15s server-enforced cooldown per IP+tag
 
 ### Player Pages
 
-- **Players directory** — Server Component fetches all Elon players across all semesters in one parallel batch; client-side memoized search, totalSets, championsCount
-- **Player profile** — 3 parallel DB batches (down from 4 sequential); minimal column selects on sets table (ID only); rank computed client-side from batch-fetched scores
+- **Players directory** — queries filtered by Elon player IDs (fetches IDs first, then filters `tournament_results` and `sets` by those IDs instead of scanning entire tables); cached with `players-list` tag and 60s TTL
+- **Player profile** — 3 parallel DB batches (down from 4 sequential); `totalSets`, `totalWins`, `winPct` and reversed arrays computed server-side (no client recomputation); cached with `player-profile` tag
 - **SVG trend chart** — monotone cubic spline interpolation, gradient area fill, glow filter; no charting library dependency
 - **Head-to-head** — expandable table (first 10 shown, rest on demand); win-rate bars rendered inline
 
@@ -198,7 +214,7 @@ All create operations include duplicate detection to prevent accidental double-s
 
 ## Concurrency Safety
 
-- **Advisory locks** — `recalculateSemester` acquires a per-semester `pg_try_advisory_lock` before recalculating; if another recalc is in progress, skips silently
+- **Advisory locks** — `recalculateSemester` acquires a per-semester `pg_try_advisory_lock` before recalculating; if lock is held, retries once after 3s, then busts cache tags as fallback
 - **Lock release** — always in `finally` block; release errors logged but don't fail the operation
 - **No player deletion** — players can only be merged or left inactive, preventing tournament history distortion
 - **Merge preserves counts** — `total_participants` is never decremented on merge conflicts (same person tracked twice)
@@ -232,14 +248,20 @@ Located in `/lib/scoring.ts`. Pure TypeScript functions, server-side only.
 
 5. DELETE all player_semester_scores WHERE semester_id = X
 
-6. UPSERT INTO player_semester_scores:
+6. UPSERT INTO player_semester_scores (sequential):
      FOR EACH Elon player with tournament_results:
        total_score = SUM(all scores)
        tournament_count = COUNT(tournament_results)
        average_score = total_score / tournament_count
 
-7. DELETE stale scores for players no longer marked Elon
+7. SELECT existing scores for stale detection (after upsert completes)
+
+8. DELETE stale scores for players no longer marked Elon
+
+9. updateTag('leaderboard-data', 'players-list', 'player-profile')
 ```
+
+Steps 6-7 run sequentially (upsert then select) to avoid a race condition where the select could read pre-upsert data.
 
 ## File Structure
 
@@ -280,7 +302,8 @@ src/
 │   ├── supabase/
 │   │   ├── client.ts              # Browser Supabase client
 │   │   ├── server.ts              # Server component Supabase client
-│   │   └── admin.ts               # Service role client (bypasses RLS)
+│   │   ├── admin.ts               # Service role client (bypasses RLS)
+│   │   └── static.ts              # Cookie-free client for unstable_cache
 │   ├── scoring.ts                 # Scoring engine (parallel, batched, guarded)
 │   ├── startgg.ts                 # start.gg GraphQL API client
 │   ├── types.ts                   # TypeScript interfaces for all DB tables
@@ -290,10 +313,12 @@ src/
 │       ├── players.ts             # Player server actions
 │       ├── player-profile.ts      # Player profile data (parallel fetch, rank computation)
 │       ├── tournaments.ts         # Tournament server actions
-│       └── semesters.ts           # Semester server actions
+│       ├── semesters.ts           # Semester server actions
+│       └── refresh-cache.ts       # Cache refresh with rate limiting
 ├── components/
 │   └── ui/
-│       ├── shape-landing-hero.tsx  # Animated geometric hero (framer-motion)
+│       ├── shape-landing-hero.tsx  # Animated geometric hero (LazyMotion)
+│       ├── last-updated.tsx        # Cache refresh button with cooldown timer
 │       └── ...                    # shadcn/ui components
 └── proxy.ts                       # Admin route protection (Next.js 16 proxy)
 ```
@@ -305,6 +330,9 @@ src/
 | Browser client | Client components, auth state | Anon key |
 | Server client | Server components, reading data | Anon key + cookies |
 | Admin client | Recalculation, mutations | Service role key (bypasses RLS) |
+| Static client | `unstable_cache` callbacks (cookie-free) | Anon key (no cookies) |
+
+The static client exists because `unstable_cache` requires deterministic inputs — cookie-based clients would produce different cache keys per request, defeating caching.
 
 ## Security
 

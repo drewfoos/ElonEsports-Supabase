@@ -4,16 +4,34 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
-## v0.6.0 — ISR Caching for Public Pages
+## v0.7.0 — Performance Optimizations
 
-### Caching
-- Public pages (leaderboard, players list, player profiles) cached with `unstable_cache` (60s TTL)
-- Cookie-free Supabase client (`createStaticClient`) for cache-compatible data fetching
-- Cache tags (`leaderboard-data`, `players-list`, `player-profile`) busted immediately on admin mutations
-- Migrated from deprecated `revalidateTag` to `updateTag` for server action cache invalidation
+### Rendering & Bundle
+- framer-motion: switched to `LazyMotion` + `domAnimation` (~5KB vs ~32KB gzipped)
+- Fireworks: animation loop stops when particles are gone (was running `requestAnimationFrame` forever)
+- Fireworks: swap-and-pop particle removal instead of O(n) `splice` in hot loop
+- `fadeUpVariants` hoisted to module scope (no re-allocation per render)
+
+### Data Fetching
+- Leaderboard: fetch directly from change handlers, removed `useEffect`/`useCallback` chain (eliminates double-render)
+- Min tournaments slider: 300ms debounce (was firing API request per drag tick)
+- Players page: queries filtered by Elon player IDs (was fetching entire `tournament_results` and `sets` tables)
+- Profile: `totalSets`, `totalWins`, `winPct`, and reversed arrays computed server-side (no client recomputation)
+
+### Caching Bug Fixes
+- API route (`/api/leaderboard`): switched from HTTP `s-maxage` to `unstable_cache` with `leaderboard-data` tag so `updateTag` invalidates both SSR and client-side requests
+- `recalculateSemester`: retries once after 3s when lock is held, busts cache tags on fallback (prevents stale data when new tournament data races with concurrent recalc)
+- Scoring step 8: upsert and select now sequential (was parallel race condition for stale detection)
+
+### Cache Refresh UX
+- "Updated Xs ago" + refresh button in main content area (visible in empty states and below tables)
+- Server-enforced 15s cooldown per IP+tag on cache refresh
+- Client shows countdown timer when rate limited
 
 ### New Files
 - `src/lib/supabase/static.ts` — Cookie-free Supabase client for use inside `unstable_cache`
+- `src/components/last-updated.tsx` — Refresh button with cooldown timer
+- `src/lib/actions/refresh-cache.ts` — Server action with rate limiting
 
 ---
 

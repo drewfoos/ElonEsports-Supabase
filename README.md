@@ -24,13 +24,14 @@ average = sum(scores) / tournaments_played
 
 ### Public Leaderboard
 
-- Animated geometric hero with floating shapes (framer-motion)
+- Animated geometric hero with floating shapes (framer-motion `LazyMotion` for tree-shaking)
 - Animated podium with Trophy and Medal icons (Lucide), gradient glow effects, and bounce-in animations
-- Canvas fireworks celebration on load
-- Semester selector and min-tournament slider
+- Canvas fireworks celebration on load (auto-stops when particles are gone)
+- Semester selector and debounced min-tournament slider
 - Staggered row animations in the rankings table
 - Competition ranking (ties share the same rank)
 - Player names link to profile pages
+- "Updated Xs ago" display with manual cache refresh button (15s server-enforced cooldown)
 
 ### Player Profiles
 
@@ -39,7 +40,7 @@ average = sum(scores) / tournaments_played
 - SVG trend chart showing score progression across tournaments (monotone cubic spline)
 - Head-to-head records with win-rate bars, sorted by total sets played
 - Full tournament history with placement badges and semester grouping
-- All data fetched in 3 parallel DB batches for fast page loads
+- All data fetched in 3 parallel DB batches; aggregates computed server-side
 
 ### start.gg Import
 
@@ -74,7 +75,7 @@ average = sum(scores) / tournaments_played
 ### Data Safety
 
 - **Idempotency** — all create operations detect duplicates (tournament name+date, player tag, semester name, start.gg event ID)
-- **Concurrency** — advisory locks prevent concurrent semester recalculations
+- **Concurrency** — advisory locks prevent concurrent semester recalculations; retry-once with cache bust on lock contention
 - **No deletion** — players cannot be deleted (only merged); tournament participant counts are never decremented
 - **Overlap validation** — semester date ranges cannot overlap (enforced server-side on create and update)
 - **Error boundaries** — 404, 500, and global error pages with recovery actions
@@ -87,8 +88,9 @@ average = sum(scores) / tournaments_played
 | Database | Supabase (Postgres, Auth, RLS) |
 | Styling | Tailwind CSS + shadcn/ui (dark theme) |
 | Icons | Lucide React |
-| Animation | Framer Motion |
+| Animation | Framer Motion (`LazyMotion` + `domAnimation`) |
 | Virtualization | @tanstack/react-virtual |
+| Caching | `unstable_cache` (60s TTL) + `updateTag` invalidation |
 | Deployment | Vercel |
 
 ## Getting Started
@@ -162,8 +164,8 @@ src/
 │   ├── scoring.ts                 # Scoring engine (parallel, batched, guarded)
 │   ├── startgg.ts                 # start.gg GraphQL API client
 │   ├── types.ts                   # TypeScript interfaces
-│   ├── supabase/                  # Supabase clients (browser, server, admin)
-│   └── actions/                   # Server actions (players, tournaments, semesters, profiles)
+│   ├── supabase/                  # Supabase clients (browser, server, admin, static)
+│   └── actions/                   # Server actions (players, tournaments, semesters, profiles, cache)
 └── proxy.ts                       # Admin route protection (Next.js 16)
 ```
 
