@@ -77,42 +77,17 @@ export async function recalculateSemester(
   semesterId: string,
   adminClient: SupabaseClient,
 ): Promise<void> {
-  // ------------------------------------------------------------------
-  // 0. Acquire advisory lock to prevent concurrent recalcs of same semester.
-  //    If lock unavailable, another recalc is in progress — skip silently.
-  //    Lock released in finally block.
-  // ------------------------------------------------------------------
-  const { data: lockAcquired } = await adminClient.rpc('acquire_semester_lock', {
-    p_semester_id: semesterId,
-  })
-
-  if (!lockAcquired) {
-    // Another recalculation is in progress. Wait for it to likely finish,
-    // then retry once — our caller may have inserted new data that the
-    // concurrent recalc started too early to include.
-    await new Promise((r) => setTimeout(r, 3000))
-    const { data: retryLock } = await adminClient.rpc('acquire_semester_lock', {
-      p_semester_id: semesterId,
-    })
-    if (!retryLock) {
-      // Still locked — bust caches so the next page load gets fresh data
-      // once the in-progress recalc finishes.
-      updateTag('leaderboard-data')
-      updateTag('players-list')
-      updateTag('player-profile')
-      return
-    }
-  }
-
-  try {
-    await _recalculateSemesterInner(semesterId, adminClient)
-    updateTag('leaderboard-data')
-    updateTag('players-list')
-    updateTag('player-profile')
-  } finally {
-    const { error: unlockErr } = await adminClient.rpc('release_semester_lock', { p_semester_id: semesterId })
-    if (unlockErr) console.error(`Failed to release semester lock for ${semesterId}:`, unlockErr.message)
-  }
+  // The recalculation is a full idempotent recompute — it reads all current
+  // data, computes everything from scratch, and upserts the results. Concurrent
+  // recalculations produce identical correct results (worst case: redundant work).
+  //
+  // Previous versions used pg_try_advisory_lock via RPC, but PostgREST uses
+  // connection pooling, so acquire and release ran on different connections —
+  // the lock provided no actual mutual exclusion and could leak.
+  await _recalculateSemesterInner(semesterId, adminClient)
+  updateTag('leaderboard-data')
+  updateTag('players-list')
+  updateTag('player-profile')
 }
 
 async function _recalculateSemesterInner(
@@ -127,11 +102,13 @@ async function _recalculateSemesterInner(
       .from('player_semester_status')
       .select('player_id')
       .eq('semester_id', semesterId)
-      .eq('is_elon_student', true),
+      .eq('is_elon_student', true)
+      .limit(10000),
     adminClient
       .from('tournaments')
       .select('id, total_participants')
-      .eq('semester_id', semesterId),
+      .eq('semester_id', semesterId)
+      .limit(10000),
   ])
 
   const statusRows = throwIfError(statusResult, 'count Elon students')
@@ -148,13 +125,25 @@ async function _recalculateSemesterInner(
   // 2. Early exits — clear scores and return
   // ------------------------------------------------------------------
   if (elonPlayerIds.size === 0) {
-    throwIfError(
-      await adminClient
+    const clearOps: PromiseLike<unknown>[] = [
+      adminClient
         .from('player_semester_scores')
         .delete()
-        .eq('semester_id', semesterId),
-      'clear scores (no Elon students)',
-    )
+        .eq('semester_id', semesterId)
+        .then((r) => throwIfError(r, 'clear scores (no Elon students)')),
+    ]
+    // Also reset tournament weights so they don't show stale elon_participants
+    if (tournaments.length > 0) {
+      const tIds = tournaments.map((t) => t.id)
+      clearOps.push(
+        adminClient
+          .from('tournaments')
+          .update({ weight: 0, elon_participants: 0 })
+          .in('id', tIds)
+          .then((r) => throwIfError(r, 'clear tournament weights (no Elon students)')),
+      )
+    }
+    await Promise.all(clearOps)
     return
   }
 
@@ -181,7 +170,8 @@ async function _recalculateSemesterInner(
         await adminClient
           .from('tournament_results')
           .select('id, tournament_id, player_id, placement')
-          .eq('tournament_id', t.id),
+          .eq('tournament_id', t.id)
+          .limit(10000),
         `fetch results for tournament ${t.id}`,
       ) as ResultRow[]
       resultsByTournament.set(t.id, data)
@@ -310,7 +300,8 @@ async function _recalculateSemesterInner(
     await adminClient
       .from('player_semester_scores')
       .select('player_id')
-      .eq('semester_id', semesterId),
+      .eq('semester_id', semesterId)
+      .limit(10000),
     'fetch existing scores for stale detection',
   )
 

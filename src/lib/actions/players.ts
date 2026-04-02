@@ -439,7 +439,7 @@ export async function mergePlayers(
   }
 
   // Execute all result mutations in parallel
-  const resultOps: PromiseLike<unknown>[] = []
+  const resultOps: PromiseLike<{ error: { message: string } | null }>[] = []
   if (toReassign.length > 0) {
     resultOps.push(
       supabase.from('tournament_results').update({ player_id: keepId }).in('id', toReassign)
@@ -456,7 +456,10 @@ export async function mergePlayers(
     )
   }
   if (resultOps.length > 0) {
-    await Promise.all(resultOps)
+    const results = await Promise.all(resultOps)
+    for (const r of results) {
+      if (r.error) return { error: `Merge failed during result reassignment: ${r.error.message}` }
+    }
   }
 
   // Note: we do NOT decrement total_participants on merge conflicts.

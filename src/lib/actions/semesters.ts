@@ -245,17 +245,17 @@ async function checkSemesterOverlap(
 export async function findOrCreateSemester(
   date: string,
   client: ReturnType<typeof createAdminClient>
-): Promise<{ id: string } | { error: string }> {
+): Promise<{ id: string; start_date: string } | { error: string }> {
   // Try to find existing semester first
   const { data: existing } = await client
     .from('semesters')
-    .select('id')
+    .select('id, start_date')
     .lte('start_date', date)
     .gte('end_date', date)
     .limit(1)
     .maybeSingle()
 
-  if (existing) return { id: existing.id }
+  if (existing) return { id: existing.id, start_date: existing.start_date }
 
   // Auto-create based on academic calendar
   const d = new Date(date + 'T00:00:00')
@@ -334,7 +334,7 @@ export async function findOrCreateSemester(
   const { data: created, error } = await client
     .from('semesters')
     .insert({ name, start_date: startDate, end_date: endDate })
-    .select('id')
+    .select('id, start_date')
     .single()
 
   if (error) {
@@ -342,5 +342,5 @@ export async function findOrCreateSemester(
   }
 
   revalidatePath('/admin/semesters')
-  return { id: created.id }
+  return { id: created.id, start_date: created.start_date }
 }

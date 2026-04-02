@@ -35,6 +35,7 @@ interface ParticipantRow {
   id: string
   playerId: string
   playerLabel: string
+  isElon: boolean
 }
 
 function generateRowId(): string {
@@ -339,6 +340,16 @@ const ParticipantRowItem = memo(function ParticipantRowItem({
           />
         </div>
 
+        {/* Elon toggle */}
+        <div className="flex items-center gap-1.5" title="Elon student">
+          <Switch
+            checked={row.isElon}
+            onCheckedChange={(checked: boolean) => onUpdate(row.id, { isElon: checked })}
+            className="h-4 w-7 data-[state=checked]:bg-emerald-600 [&>span]:h-3 [&>span]:w-3"
+          />
+          <span className="text-[10px] text-muted-foreground">Elon</span>
+        </div>
+
         {/* Remove */}
         <Button
           type="button"
@@ -366,7 +377,7 @@ function ManualEntryTab({ players: initialPlayers }: { players: Player[] }) {
   const [name, setName] = useState('')
   const [date, setDate] = useState('')
   const [participants, setParticipants] = useState<ParticipantRow[]>([
-    { id: generateRowId(), playerId: '', playerLabel: '' },
+    { id: generateRowId(), playerId: '', playerLabel: '', isElon: true },
   ])
   const [bracketFormat, setBracketFormat] = useState<BracketFormat>('double')
   const [submitting, setSubmitting] = useState(false)
@@ -386,7 +397,7 @@ function ManualEntryTab({ players: initialPlayers }: { players: Player[] }) {
   const addParticipant = useCallback(() => {
     setParticipants((prev) => [
       ...prev,
-      { id: generateRowId(), playerId: '', playerLabel: '' },
+      { id: generateRowId(), playerId: '', playerLabel: '', isElon: true },
     ])
   }, [])
 
@@ -484,6 +495,10 @@ function ManualEntryTab({ players: initialPlayers }: { players: Player[] }) {
 
     setSubmitting(true)
     try {
+      const elonFlags: Record<string, boolean> = {}
+      for (const p of participants) {
+        elonFlags[p.playerId] = p.isElon
+      }
       const result = await createTournament({
         name: name.trim(),
         date,
@@ -491,6 +506,7 @@ function ManualEntryTab({ players: initialPlayers }: { players: Player[] }) {
           playerId: p.playerId,
           placement: placements[i],
         })),
+        elonFlags,
       })
 
       if ('error' in result) {
