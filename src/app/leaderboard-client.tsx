@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Select,
@@ -18,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { HeroGeometric } from '@/components/ui/shape-landing-hero'
 import { Trophy, Medal } from 'lucide-react'
 import type { Semester, LeaderboardEntry } from '@/lib/types'
 
@@ -233,52 +235,61 @@ export function LeaderboardClient({
   const hasEntries = entries.length > 0
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex min-h-screen flex-col bg-[#030303]">
       {/* Header */}
-      <header className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#030303]/90 backdrop-blur-lg">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <span className="text-lg font-bold tracking-tight text-foreground">
+            <span className="text-lg font-bold tracking-tight text-white">
               Elon Esports
             </span>
-            <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
+            <Badge className="border-0 bg-white/[0.06] text-[10px] uppercase tracking-wider text-white/50">
               Smash PR
             </Badge>
           </div>
-          <a
-            href={isLoggedIn ? '/admin' : '/login'}
-            className={isLoggedIn
-              ? "inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-              : "text-xs text-muted-foreground transition-colors hover:text-foreground"
-            }
-          >
-            {isLoggedIn ? 'Admin' : 'Login'}
-          </a>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              href="/players"
+              className="text-xs font-medium text-white/40 transition-colors hover:text-white/70"
+            >
+              Players
+            </Link>
+            <a
+              href={isLoggedIn ? '/admin' : '/login'}
+              className={isLoggedIn
+                ? "inline-flex items-center rounded-md bg-white/[0.1] px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/[0.15]"
+                : "text-xs text-white/40 transition-colors hover:text-white/70"
+              }
+            >
+              {isLoggedIn ? 'Admin' : 'Login'}
+            </a>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
-        {/* Hero */}
-        <div className="mb-10 text-center">
-          <h1 className="bg-gradient-to-r from-amber-400 via-orange-300 to-amber-400 bg-clip-text text-4xl font-extrabold tracking-tight text-transparent sm:text-5xl">
-            Power Rankings
-          </h1>
-          <p className="mt-2 text-lg text-muted-foreground">
-            Super Smash Bros. Ultimate
-          </p>
-        </div>
+      {/* Hero */}
+      <HeroGeometric
+        badge="Elon University Esports"
+        title1="Power"
+        title2="Rankings"
+      >
+        <p className="text-base sm:text-lg md:text-xl text-white/30 leading-relaxed font-light tracking-wide max-w-xl mx-auto">
+          Super Smash Bros. Ultimate
+        </p>
+      </HeroGeometric>
 
-        {/* Controls */}
-        <div className="mb-8 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+      {/* Controls bar */}
+      <div className="relative z-10 border-b border-white/[0.06]">
+        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-4 px-4 py-5 sm:grid-cols-2 sm:py-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-muted-foreground">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-white/25">
               Semester
             </label>
             <Select
               value={selectedSemesterId}
               onValueChange={(val) => setSelectedSemesterId(val as string)}
             >
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-full sm:w-52 border-white/[0.08] bg-white/[0.03] text-white/80 [&>svg]:text-white/30">
                 <SelectValue placeholder="Select semester">
                   {semesters.find((s) => s.id === selectedSemesterId)?.name}
                 </SelectValue>
@@ -293,12 +304,12 @@ export function LeaderboardClient({
             </Select>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-muted-foreground">
+          <div className="flex flex-col gap-1.5 sm:items-end">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-white/25">
               Min. Tournaments:{' '}
-              <span className="text-foreground">{minTournaments}</span>
+              <span className="text-white/50 font-mono">{minTournaments}</span>
             </label>
-            <div className="w-48">
+            <div className="w-full sm:w-52">
               <input
                 type="range"
                 min={1}
@@ -306,27 +317,29 @@ export function LeaderboardClient({
                 step={1}
                 value={minTournaments}
                 onChange={(e) => setMinTournaments(Number(e.target.value))}
-                className="w-full cursor-pointer accent-primary"
+                className="w-full cursor-pointer accent-indigo-400"
               />
             </div>
           </div>
         </div>
+      </div>
 
+      <main className="relative z-10 mx-auto w-full max-w-5xl flex-1 rounded-t-3xl bg-white/[0.02] px-4 py-10 sm:px-6">
         {/* Loading state */}
         {loading && (
           <div className="flex flex-col items-center gap-4 py-20">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground border-t-foreground" />
-            <p className="text-sm text-muted-foreground">Loading rankings...</p>
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white/60" />
+            <p className="text-sm text-white/30">Loading rankings...</p>
           </div>
         )}
 
         {/* Empty state */}
         {!loading && !hasEntries && (
           <div className="flex flex-col items-center gap-2 py-20">
-            <p className="text-lg font-medium text-muted-foreground">
+            <p className="text-lg font-medium text-white/40">
               No rankings available for this semester
             </p>
-            <p className="text-sm text-muted-foreground/70">
+            <p className="text-sm text-white/20">
               Try selecting a different semester or lowering the minimum tournament requirement.
             </p>
           </div>
@@ -361,63 +374,64 @@ export function LeaderboardClient({
 
         {/* Full rankings table */}
         {!loading && hasEntries && (
-          <Card className="overflow-hidden border-border/50">
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent border-border/50">
-                    <TableHead className="w-16 text-center">Rank</TableHead>
-                    <TableHead>Player</TableHead>
-                    <TableHead className="text-right">Avg Score</TableHead>
-                    <TableHead className="text-right">Tournaments</TableHead>
+          <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent border-white/[0.06]">
+                  <TableHead className="w-16 text-center text-white/30">Rank</TableHead>
+                  <TableHead className="text-white/30">Player</TableHead>
+                  <TableHead className="text-right text-white/30">Avg Score</TableHead>
+                  <TableHead className="text-right text-white/30">Tournaments</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {entries.map((entry, i) => (
+                  <TableRow
+                    key={entry.player_id}
+                    className={
+                      entry.rank <= 3
+                        ? 'bg-white/[0.03] hover:bg-white/[0.05] border-white/[0.04]'
+                        : 'hover:bg-white/[0.03] border-white/[0.04]'
+                    }
+                    style={{
+                      animation: `fadeSlideIn 0.3s ease-out ${Math.min(i * 0.03, 0.5)}s both`,
+                    }}
+                  >
+                    <TableCell className="text-center font-mono">
+                      <RankDisplay rank={entry.rank} />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {entry.rank <= 3 && (
+                          entry.rank === 1
+                            ? <Trophy className="h-4 w-4 text-amber-400" strokeWidth={1.5} />
+                            : <Medal className={`h-4 w-4 ${entry.rank === 2 ? 'text-zinc-300' : 'text-orange-400'}`} strokeWidth={1.5} />
+                        )}
+                        <Link
+                          href={`/players/${entry.player_id}`}
+                          className={`transition-colors hover:text-white ${entry.rank <= 3 ? 'font-semibold text-white/90' : 'font-medium text-white/70'}`}
+                        >
+                          {entry.gamer_tag}
+                        </Link>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-white/40">
+                      {entry.average_score.toFixed(3)}
+                    </TableCell>
+                    <TableCell className="text-right text-white/40">
+                      {entry.tournament_count}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {entries.map((entry, i) => (
-                    <TableRow
-                      key={entry.player_id}
-                      className={
-                        entry.rank <= 3
-                          ? 'bg-muted/30 hover:bg-muted/50'
-                          : 'hover:bg-muted/20'
-                      }
-                      style={{
-                        animation: `fadeSlideIn 0.3s ease-out ${i * 0.03}s both`,
-                      }}
-                    >
-                      <TableCell className="text-center font-mono">
-                        <RankDisplay rank={entry.rank} />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {entry.rank <= 3 && (
-                            entry.rank === 1
-                              ? <Trophy className="h-4 w-4 text-amber-400" strokeWidth={1.5} />
-                              : <Medal className={`h-4 w-4 ${entry.rank === 2 ? 'text-zinc-300' : 'text-orange-400'}`} strokeWidth={1.5} />
-                          )}
-                          <span className={entry.rank <= 3 ? 'font-semibold' : 'font-medium'}>
-                            {entry.gamer_tag}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-muted-foreground">
-                        {entry.average_score.toFixed(3)}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {entry.tournament_count}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border/40 py-6">
-        <p className="text-center text-xs text-muted-foreground">
+      <footer className="border-t border-white/[0.06] py-6">
+        <p className="text-center text-xs text-white/20">
           Elon University Esports Club
         </p>
       </footer>
@@ -512,15 +526,18 @@ function PodiumCard({
         {cfg.label}
       </span>
 
-      <span className={`mt-2 max-w-full truncate ${cfg.nameClass} text-foreground`}>
+      <Link
+        href={`/players/${entry.player_id}`}
+        className={`mt-2 max-w-full truncate ${cfg.nameClass} text-white hover:underline`}
+      >
         {entry.gamer_tag}
-      </span>
+      </Link>
 
-      <span className="mt-1 font-mono text-xs text-muted-foreground">
+      <span className="mt-1 font-mono text-xs text-white/40">
         {entry.average_score.toFixed(3)}
       </span>
 
-      <span className="mt-0.5 text-[10px] text-muted-foreground/60">
+      <span className="mt-0.5 text-[10px] text-white/20">
         {entry.tournament_count} tournament{entry.tournament_count !== 1 ? 's' : ''}
       </span>
     </div>
@@ -541,5 +558,5 @@ function RankDisplay({ rank }: { rank: number }) {
   if (rank === 3) {
     return <span className="text-base font-bold text-orange-400">3</span>
   }
-  return <span className="text-muted-foreground">{rank}</span>
+  return <span className="text-white/40">{rank}</span>
 }

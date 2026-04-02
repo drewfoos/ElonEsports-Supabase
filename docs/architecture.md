@@ -92,6 +92,20 @@ Admin → POST confirmTournamentImport(data)
      → Return success
 ```
 
+### Public: Player Profile Load
+
+```
+Browser → GET /players/[playerId]
+       → Server Component: getPlayerProfile(playerId)
+       → Batch 1 (parallel): player info + Elon status check
+       → If not Elon → notFound()
+       → Batch 2 (parallel): semester scores, tournament results, set wins, set losses
+       → Batch 3 (parallel): rank computation (all scores per semester) + opponent tags
+       → Return profile with trend data, h2h, tournament history
+```
+
+3 sequential DB batches (down from 4). Rank computation requires batch 2 results (semester IDs), opponent tags require batch 2 results (h2h map), so batch 3 runs both in parallel.
+
 ### Admin: Change Elon Status
 
 ```
@@ -158,6 +172,14 @@ Admin → POST mergePlayers(keepId, mergeId)
 - **Single semester query** — collapsed two sequential fallback queries into one sorted query with client-side pick
 - **Canvas fireworks** — particle system with gravity, glow trails, and staggered bursts; auto-cleans up after animation
 - **Staggered animations** — podium cards bounce in sequentially, table rows fade in with delay offsets
+- **HeroGeometric** — framer-motion animated floating shapes shared by leaderboard and players pages
+
+### Player Pages
+
+- **Players directory** — Server Component fetches all Elon players across all semesters in one parallel batch; client-side memoized search, totalSets, championsCount
+- **Player profile** — 3 parallel DB batches (down from 4 sequential); minimal column selects on sets table (ID only); rank computed client-side from batch-fetched scores
+- **SVG trend chart** — monotone cubic spline interpolation, gradient area fill, glow filter; no charting library dependency
+- **Head-to-head** — expandable table (first 10 shown, rest on demand); win-rate bars rendered inline
 
 ## Idempotency
 
@@ -226,6 +248,12 @@ src/
 │   ├── not-found.tsx              # 404 page
 │   ├── error.tsx                  # Runtime error boundary
 │   ├── global-error.tsx           # Root error boundary
+│   ├── players/
+│   │   ├── page.tsx               # Players directory (Server Component, all semesters)
+│   │   ├── players-list-client.tsx # Interactive players list (search, table, cards)
+│   │   └── [playerId]/
+│   │       ├── page.tsx           # Player profile (Server Component)
+│   │       └── profile-client.tsx # Profile UI (trend chart, h2h, tournament history)
 │   ├── login/
 │   │   └── page.tsx               # Admin login (email/password)
 │   ├── admin/
@@ -256,10 +284,13 @@ src/
 │   └── actions/
 │       ├── auth.ts                # requireAdmin() helper
 │       ├── players.ts             # Player server actions
+│       ├── player-profile.ts      # Player profile data (parallel fetch, rank computation)
 │       ├── tournaments.ts         # Tournament server actions
 │       └── semesters.ts           # Semester server actions
 ├── components/
-│   └── ui/                        # shadcn/ui components
+│   └── ui/
+│       ├── shape-landing-hero.tsx  # Animated geometric hero (framer-motion)
+│       └── ...                    # shadcn/ui components
 └── proxy.ts                       # Admin route protection (Next.js 16 proxy)
 ```
 

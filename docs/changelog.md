@@ -4,6 +4,54 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 
 ---
 
+## 2026-04-02 — Player Profiles, Public Pages Redesign & Optimization
+
+### Player Profile Pages (`/players/[id]`)
+- Hero avatar with gradient backgrounds and glow for top-3 ranked players
+- Stat cards: Current Rank, Best Placement, Avg Score, Set Record (colored icons)
+- SVG trend chart with monotone cubic spline interpolation and glow filter
+- Head-to-head records table with win-rate bars, sorted by total sets, expandable beyond 10
+- Tournament history with placement badges (gold/silver/bronze) and staggered animations
+- Breadcrumb nav: Rankings / Players / GamerTag
+- Server action fetches all data in 3 parallel batches (player+status → scores+results+sets → ranks+opponents)
+
+### Players Directory (`/players`)
+- All Elon players across all semesters (not current-only, since h2h spans semesters)
+- Stats bar: player count, total sets, champions count (memoized)
+- Search with `useMemo` filtering by gamer tag
+- Mobile: card grid with avatars and set records; Desktop: sortable table
+- `PlayerAvatar` with ring colors for top-3 placements
+
+### Public Pages Redesign
+- HeroGeometric animated component (framer-motion floating shapes with `motion.div`)
+- Leaderboard hero: "Power / Rankings" with gradient text and floating geometric shapes
+- Players hero: "Player / Directory" with Elon subtitle
+- Dark theme overhaul: `bg-[#030303]` with `white/[opacity]` system across all public pages
+- Sticky header with `backdrop-blur-lg`, "Players" nav link added
+- Controls bar separated from hero, content area has `rounded-t-3xl bg-white/[0.02]` elevation
+- Mobile-responsive controls: full-width on mobile, fixed-width on desktop
+
+### Optimization
+- Removed dead `tournamentCount` variable and unused `average_score` from `PlayerListItem`
+- Merged two loops over tournament results into single pass (best placement + count)
+- Memoized `totalSets` and `championsCount` in players list client
+- Removed unused `loser_score`/`winner_score` columns from sets queries in player profile
+- Parallelized rank computation + opponent tag fetch (was 2 sequential calls, now 1 parallel batch)
+- Player profile: 4 sequential DB batches → 3
+
+### New Files
+- `src/app/players/page.tsx` — Players directory (Server Component)
+- `src/app/players/players-list-client.tsx` — Interactive players list UI
+- `src/app/players/[playerId]/page.tsx` — Player profile (Server Component)
+- `src/app/players/[playerId]/profile-client.tsx` — Interactive profile UI
+- `src/lib/actions/player-profile.ts` — Player profile server action
+- `src/components/ui/shape-landing-hero.tsx` — Animated geometric hero (framer-motion)
+
+### Dependencies
+- Added `framer-motion` for animated hero components
+
+---
+
 ## 2026-04-02 — Idempotency, Optimization & UX Polish
 
 ### Idempotency Guards

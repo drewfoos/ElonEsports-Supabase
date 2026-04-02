@@ -44,6 +44,18 @@ export interface TournamentResult {
   score: number;
 }
 
+export interface GameSet {
+  id: string;
+  tournament_id: string;
+  startgg_set_id: string | null;
+  winner_player_id: string | null;
+  loser_player_id: string | null;
+  winner_score: number | null;
+  loser_score: number | null;
+  round: string | null;
+  created_at: string;
+}
+
 // start.gg API response types
 
 export interface StartggTournamentData {

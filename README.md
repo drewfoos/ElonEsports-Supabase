@@ -24,11 +24,22 @@ average = sum(scores) / tournaments_played
 
 ### Public Leaderboard
 
+- Animated geometric hero with floating shapes (framer-motion)
 - Animated podium with Trophy and Medal icons (Lucide), gradient glow effects, and bounce-in animations
 - Canvas fireworks celebration on load
 - Semester selector and min-tournament slider
 - Staggered row animations in the rankings table
 - Competition ranking (ties share the same rank)
+- Player names link to profile pages
+
+### Player Profiles
+
+- Player directory at `/players` with search, stats bar, and responsive card/table views
+- Individual profiles at `/players/[id]` with stat cards (rank, best placement, avg score, set record)
+- SVG trend chart showing score progression across tournaments (monotone cubic spline)
+- Head-to-head records with win-rate bars, sorted by total sets played
+- Full tournament history with placement badges and semester grouping
+- All data fetched in 3 parallel DB batches for fast page loads
 
 ### start.gg Import
 
@@ -74,6 +85,7 @@ average = sum(scores) / tournaments_played
 | Database | Supabase (Postgres, Auth, RLS) |
 | Styling | Tailwind CSS + shadcn/ui (dark theme) |
 | Icons | Lucide React |
+| Animation | Framer Motion |
 | Virtualization | @tanstack/react-virtual |
 | Deployment | Vercel |
 
@@ -132,6 +144,12 @@ src/
 ├── app/
 │   ├── page.tsx                   # Public leaderboard (SSR, parallel fetch)
 │   ├── leaderboard-client.tsx     # Interactive leaderboard UI (fireworks, podium)
+│   ├── players/
+│   │   ├── page.tsx               # Players directory (all semesters)
+│   │   ├── players-list-client.tsx # Search, stats, responsive table/cards
+│   │   └── [playerId]/
+│   │       ├── page.tsx           # Player profile (Server Component)
+│   │       └── profile-client.tsx # Trend chart, h2h, tournament history
 │   ├── not-found.tsx              # 404 page
 │   ├── error.tsx                  # Runtime error boundary
 │   ├── global-error.tsx           # Root error boundary
@@ -143,7 +161,7 @@ src/
 │   ├── startgg.ts                 # start.gg GraphQL API client
 │   ├── types.ts                   # TypeScript interfaces
 │   ├── supabase/                  # Supabase clients (browser, server, admin)
-│   └── actions/                   # Server actions (players, tournaments, semesters)
+│   └── actions/                   # Server actions (players, tournaments, semesters, profiles)
 └── proxy.ts                       # Admin route protection (Next.js 16)
 ```
 
