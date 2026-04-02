@@ -21,7 +21,7 @@ import {
 import { toast } from 'sonner'
 import type { Semester } from '@/lib/types'
 
-export function RecalculateButton({ semesters }: { semesters: Semester[] }) {
+export function RecalculateButton({ semesters, tournamentCounts }: { semesters: Semester[]; tournamentCounts: Record<string, number> }) {
   const [open, setOpen] = useState(false)
   const [selectedId, setSelectedId] = useState('')
   const [loading, setLoading] = useState(false)
@@ -80,12 +80,15 @@ export function RecalculateButton({ semesters }: { semesters: Semester[] }) {
                 ))}
               </SelectContent>
             </Select>
+            {selectedId && !(tournamentCounts[selectedId] > 0) && (
+              <p className="mt-2 text-sm text-muted-foreground">No tournaments in this semester.</p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
               Cancel
             </Button>
-            <Button onClick={handleRecalculate} disabled={loading || !selectedId}>
+            <Button onClick={handleRecalculate} disabled={loading || !selectedId || !(tournamentCounts[selectedId] > 0)}>
               {loading ? (
                 <>
                   <span className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground border-t-foreground" />

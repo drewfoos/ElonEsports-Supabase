@@ -805,7 +805,7 @@ export default function PlayersPage() {
       )}
 
       {/* Add Player Dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) setAddTag('') }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Player</DialogTitle>
@@ -832,7 +832,7 @@ export default function PlayersPage() {
       </Dialog>
 
       {/* Edit Player Dialog */}
-      <Dialog open={editPlayer !== null} onOpenChange={(open) => { if (!open) setEditPlayer(null) }}>
+      <Dialog open={editPlayer !== null} onOpenChange={(open) => { if (!open) { setEditPlayer(null); setEditTag('') } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit GamerTag</DialogTitle>
@@ -878,7 +878,7 @@ export default function PlayersPage() {
       </Dialog>
 
       {/* Manage start.gg IDs Dialog */}
-      <Dialog open={idsPlayer !== null} onOpenChange={(open) => { if (!open) setIdsPlayer(null) }}>
+      <Dialog open={idsPlayer !== null} onOpenChange={(open) => { if (!open) { setIdsPlayer(null); setIdsNewId('') } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Manage start.gg IDs</DialogTitle>
@@ -929,7 +929,15 @@ export default function PlayersPage() {
       </Dialog>
 
       {/* Merge Players Dialog */}
-      <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
+      <Dialog open={mergeOpen} onOpenChange={(open) => {
+        setMergeOpen(open)
+        if (!open) {
+          setMergeKeepId('')
+          setMergeMergeId('')
+          setKeepSearch('')
+          setMergeSearch('')
+        }
+      }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Merge Players</DialogTitle>

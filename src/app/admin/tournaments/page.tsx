@@ -232,21 +232,23 @@ export default function TournamentsPage() {
             ))}
           </SelectContent>
         </Select>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRecalculate}
-          disabled={recalculating || !selectedSemesterId}
-        >
-          {recalculating ? (
-            <>
-              <span className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground border-t-foreground" />
-              Recalculating...
-            </>
-          ) : (
-            'Recalculate Semester'
-          )}
-        </Button>
+        <span title={tournaments.length === 0 ? 'No tournaments in this semester to recalculate' : undefined}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRecalculate}
+            disabled={recalculating || !selectedSemesterId || tournaments.length === 0}
+          >
+            {recalculating ? (
+              <>
+                <span className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground border-t-foreground" />
+                Recalculating...
+              </>
+            ) : (
+              'Recalculate Semester'
+            )}
+          </Button>
+        </span>
       </div>
 
       {/* Tournament table */}

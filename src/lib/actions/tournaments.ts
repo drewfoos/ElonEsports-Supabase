@@ -686,6 +686,15 @@ export async function recalculateSemesterScores(
   await requireAdmin()
   const supabase = createAdminClient()
 
+  // Skip if semester has no tournaments
+  const { count, error: countErr } = await supabase
+    .from('tournaments')
+    .select('id', { count: 'exact', head: true })
+    .eq('semester_id', semesterId)
+
+  if (countErr) return { error: countErr.message }
+  if (!count || count === 0) return { error: 'No tournaments in this semester — nothing to recalculate.' }
+
   try {
     await recalculateSemester(semesterId, supabase)
   } catch (err) {

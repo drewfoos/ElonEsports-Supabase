@@ -28,11 +28,13 @@ export default async function AdminDashboardPage() {
     allSemestersResult,
     playerCountResult,
     totalTournamentCountResult,
+    tournamentsBySemesterResult,
   ] = await Promise.all([
     getCurrentSemester(),
     getSemesters(),
     supabase.from('players').select('*', { count: 'exact', head: true }),
     supabase.from('tournaments').select('*', { count: 'exact', head: true }),
+    supabase.from('tournaments').select('semester_id'),
   ])
 
   const allSemesters = allSemestersResult && !('error' in allSemestersResult)
@@ -46,6 +48,12 @@ export default async function AdminDashboardPage() {
 
   const playerCount = playerCountResult.count ?? 0
   const totalTournamentCount = totalTournamentCountResult.count ?? 0
+
+  // Build per-semester tournament counts for RecalculateButton
+  const semesterTournamentCounts: Record<string, number> = {}
+  for (const row of tournamentsBySemesterResult.data ?? []) {
+    semesterTournamentCounts[row.semester_id] = (semesterTournamentCounts[row.semester_id] ?? 0) + 1
+  }
 
   // Second parallel batch — depends on currentSemester
   let tournaments: Awaited<ReturnType<typeof getTournaments>> = []
@@ -160,7 +168,7 @@ export default async function AdminDashboardPage() {
             View Public Rankings
           </Link>
           {allSemesters.length > 0 && (
-            <RecalculateButton semesters={allSemesters} />
+            <RecalculateButton semesters={allSemesters} tournamentCounts={semesterTournamentCounts} />
           )}
         </div>
       </div>

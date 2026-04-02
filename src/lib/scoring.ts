@@ -93,7 +93,8 @@ export async function recalculateSemester(
   try {
     await _recalculateSemesterInner(semesterId, adminClient)
   } finally {
-    await adminClient.rpc('release_semester_lock', { p_semester_id: semesterId })
+    const { error: unlockErr } = await adminClient.rpc('release_semester_lock', { p_semester_id: semesterId })
+    if (unlockErr) console.error(`Failed to release semester lock for ${semesterId}:`, unlockErr.message)
   }
 }
 
@@ -289,16 +290,16 @@ async function _recalculateSemesterInner(
     adminClient
       .from('player_semester_scores')
       .select('player_id')
-      .eq('semester_id', semesterId),
+      .eq('semester_id', semesterId)
+      .then((res) => throwIfError(res, 'fetch existing scores for stale detection')),
   ])
 
   // ------------------------------------------------------------------
   // 9. Delete stale rows for players no longer in the computed set
   // ------------------------------------------------------------------
   const computedPlayerIds = new Set(scoreRows.map((r) => r.player_id))
-  const stalePlayerIds = (
-    (existingResult.data ?? []) as { player_id: string }[]
-  )
+  const existingRows = (existingResult ?? []) as { player_id: string }[]
+  const stalePlayerIds = existingRows
     .map((r) => r.player_id)
     .filter((pid) => !computedPlayerIds.has(pid))
 

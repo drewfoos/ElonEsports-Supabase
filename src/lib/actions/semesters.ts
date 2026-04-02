@@ -96,6 +96,10 @@ export async function updateSemester(
       .neq('semester_id', id),
   ])
 
+  if (tournamentsRes.error) return { error: tournamentsRes.error.message }
+  if (allSemestersRes.error) return { error: allSemestersRes.error.message }
+  if (orphanedRes.error) return { error: orphanedRes.error.message }
+
   const allSemesters = (allSemestersRes.data ?? []) as { id: string; start_date: string; end_date: string }[]
   const semesterLookup = (date: string, excludeId: string) =>
     allSemesters.find(s => s.id !== excludeId && date >= s.start_date && date <= s.end_date)
@@ -200,7 +204,8 @@ async function checkSemesterOverlap(
     query = query.neq('id', excludeId)
   }
 
-  const { data: overlapping } = await query
+  const { data: overlapping, error: overlapErr } = await query
+  if (overlapErr) return `Failed to check overlaps: ${overlapErr.message}`
 
   if (overlapping && overlapping.length > 0) {
     const names = overlapping.map(s => `"${s.name}"`).join(', ')

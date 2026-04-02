@@ -940,34 +940,32 @@ function StartggImportTab() {
           <p className="text-sm text-muted-foreground">
             {events.length} Smash Ultimate event{events.length !== 1 ? 's' : ''} found. Select one to import:
           </p>
-          <div className="flex items-end gap-3">
-            <div className="flex-1 space-y-2">
-              <Label htmlFor="event-select">Event</Label>
-              <Select
-                value={selectedEventId}
-                onValueChange={(val) => { if (val) setSelectedEventId(val) }}
-              >
-                <SelectTrigger id="event-select">
-                  <SelectValue placeholder="Choose event">
-                    {(() => {
-                      const ev = events?.find((e) => String(e.id) === selectedEventId)
-                      return ev ? `${ev.name} (${ev.numEntrants} entrants)` : undefined
-                    })()}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {events.map((ev) => {
-                    const isTeams = (ev.teamRosterSize?.maxPlayers ?? 1) > 1
-                    return (
-                      <SelectItem key={ev.id} value={String(ev.id)} label={`${ev.name} (${ev.numEntrants} entrants)`} disabled={isTeams}>
-                        {ev.name} ({ev.numEntrants} entrants){isTeams ? ' — Doubles/Teams' : ''}
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={handleLoadPreview} disabled={loading || !selectedEventId}>
+          <Label htmlFor="event-select">Event</Label>
+          <div className="flex items-center gap-3">
+            <Select
+              value={selectedEventId}
+              onValueChange={(val) => { if (val) setSelectedEventId(val) }}
+            >
+              <SelectTrigger id="event-select" className="flex-1">
+                <SelectValue placeholder="Choose event">
+                  {(() => {
+                    const ev = events?.find((e) => String(e.id) === selectedEventId)
+                    return ev ? `${ev.name} (${ev.numEntrants} entrants)` : undefined
+                  })()}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {events.map((ev) => {
+                  const isTeams = (ev.teamRosterSize?.maxPlayers ?? 1) > 1
+                  return (
+                    <SelectItem key={ev.id} value={String(ev.id)} label={`${ev.name} (${ev.numEntrants} entrants)`} disabled={isTeams}>
+                      {ev.name} ({ev.numEntrants} entrants){isTeams ? ' — Doubles/Teams' : ''}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+            <Button size="lg" className="shrink-0" onClick={handleLoadPreview} disabled={loading || !selectedEventId}>
               {loading ? 'Loading...' : 'Load Standings'}
             </Button>
           </div>

@@ -273,6 +273,9 @@ export async function deletePlayer(
     supabase.from('tournament_results').select('tournament_id').eq('player_id', id),
   ])
 
+  if (statusesRes.error) return { error: statusesRes.error.message }
+  if (resultsRes.error) return { error: resultsRes.error.message }
+
   for (const s of statusesRes.data ?? []) affectedSemesterIds.add(s.semester_id)
 
   const affectedTournamentIds = resultsRes.data?.length
@@ -280,10 +283,11 @@ export async function deletePlayer(
     : []
 
   if (affectedTournamentIds.length > 0) {
-    const { data: tournaments } = await supabase
+    const { data: tournaments, error: tErr } = await supabase
       .from('tournaments')
       .select('id, semester_id')
       .in('id', affectedTournamentIds)
+    if (tErr) return { error: tErr.message }
     for (const t of tournaments ?? []) affectedSemesterIds.add(t.semester_id)
   }
 
@@ -297,12 +301,16 @@ export async function deletePlayer(
   }
 
   // Atomic decrement total_participants (no read-then-write race)
+  // Best-effort — player is already deleted, so log but don't fail
   if (affectedTournamentIds.length > 0) {
-    await Promise.all(
+    const rpcResults = await Promise.all(
       affectedTournamentIds.map(tid =>
         supabase.rpc('decrement_participants', { p_tournament_id: tid, p_amount: 1 })
       )
     )
+    for (const r of rpcResults) {
+      if (r.error) console.error('decrement_participants failed:', r.error.message)
+    }
   }
 
   // Parallel: recalculate all affected semesters
@@ -328,6 +336,9 @@ export async function deletePlayers(
     supabase.from('tournament_results').select('tournament_id, player_id').in('player_id', ids),
   ])
 
+  if (statusesRes.error) return { error: statusesRes.error.message }
+  if (resultsRes.error) return { error: resultsRes.error.message }
+
   const affectedSemesterIds = new Set<string>()
   for (const s of statusesRes.data ?? []) affectedSemesterIds.add(s.semester_id)
 
@@ -339,10 +350,11 @@ export async function deletePlayers(
 
   const affectedTournamentIds = [...tournamentPlayerCounts.keys()]
   if (affectedTournamentIds.length > 0) {
-    const { data: tournaments } = await supabase
+    const { data: tournaments, error: tErr } = await supabase
       .from('tournaments')
       .select('id, semester_id')
       .in('id', affectedTournamentIds)
+    if (tErr) return { error: tErr.message }
     for (const t of tournaments ?? []) affectedSemesterIds.add(t.semester_id)
   }
 
@@ -354,9 +366,9 @@ export async function deletePlayers(
 
   if (error) return { error: error.message }
 
-  // Atomic decrement total_participants per tournament
+  // Atomic decrement total_participants per tournament (best-effort post-delete)
   if (affectedTournamentIds.length > 0) {
-    await Promise.all(
+    const rpcResults = await Promise.all(
       affectedTournamentIds.map(tid =>
         supabase.rpc('decrement_participants', {
           p_tournament_id: tid,
@@ -364,6 +376,9 @@ export async function deletePlayers(
         })
       )
     )
+    for (const r of rpcResults) {
+      if (r.error) console.error('decrement_participants failed:', r.error.message)
+    }
   }
 
   // Recalculate all affected semesters
@@ -477,9 +492,10 @@ export async function mergePlayers(
     supabase.from('players').select('startgg_player_ids').eq('id', mergeId).single(),
   ])
 
+  if (keepStatusesRes.error) return { error: keepStatusesRes.error.message }
   if (mergeStatusesRes.error) return { error: mergeStatusesRes.error.message }
-  if (mergeResultsRes.error) return { error: mergeResultsRes.error.message }
   if (keepResultsRes.error) return { error: keepResultsRes.error.message }
+  if (mergeResultsRes.error) return { error: mergeResultsRes.error.message }
   if (keepPlayerRes.error) return { error: keepPlayerRes.error.message }
   if (mergePlayerRes.error) return { error: mergePlayerRes.error.message }
 
@@ -557,11 +573,14 @@ export async function mergePlayers(
 
   // Atomic decrement total_participants for tournaments where we removed a duplicate
   if (conflictTournamentIds.length > 0) {
-    await Promise.all(
+    const rpcResults = await Promise.all(
       conflictTournamentIds.map(tid =>
         supabase.rpc('decrement_participants', { p_tournament_id: tid, p_amount: 1 })
       )
     )
+    for (const r of rpcResults) {
+      if (r.error) console.error('decrement_participants failed:', r.error.message)
+    }
   }
 
   // 4. Merge player_semester_status: prefer is_elon_student = true (batched)
