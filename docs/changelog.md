@@ -1,10 +1,35 @@
 # Changelog
 
-All notable decisions, changes, and progress for the Elon Esports Smash PR rebuild.
+All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
-## 2026-04-02 — Player Profiles, Public Pages Redesign & Optimization
+## v0.6.0 — ISR Caching for Public Pages
+
+### Caching
+- Public pages (leaderboard, players list, player profiles) cached with `unstable_cache` (60s TTL)
+- Cookie-free Supabase client (`createStaticClient`) for cache-compatible data fetching
+- Cache tags (`leaderboard-data`, `players-list`, `player-profile`) busted immediately on admin mutations
+- Migrated from deprecated `revalidateTag` to `updateTag` for server action cache invalidation
+
+### New Files
+- `src/lib/supabase/static.ts` — Cookie-free Supabase client for use inside `unstable_cache`
+
+---
+
+## v0.5.0 — Player Deletion Removal & Scoring Fixes
+
+### Breaking Changes
+- Player deletion removed entirely — merge is the only way to consolidate players
+- Delete buttons, batch delete UI, and all `deletePlayer`/`deletePlayers` functions removed
+
+### Scoring Fixes
+- Merge no longer decrements `total_participants` — merged players are the same person tracked twice
+- Weight formula documented correctly: `weight = elon_participants / total_participants` (no normalization)
+
+---
+
+## v0.4.0 — Player Profiles, Public Pages Redesign & Optimization
 
 ### Player Profile Pages (`/players/[id]`)
 - Hero avatar with gradient backgrounds and glow for top-3 ranked players
@@ -13,7 +38,7 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 - Head-to-head records table with win-rate bars, sorted by total sets, expandable beyond 10
 - Tournament history with placement badges (gold/silver/bronze) and staggered animations
 - Breadcrumb nav: Rankings / Players / GamerTag
-- Server action fetches all data in 3 parallel batches (player+status → scores+results+sets → ranks+opponents)
+- Server action fetches all data in 3 parallel batches (player+status -> scores+results+sets -> ranks+opponents)
 
 ### Players Directory (`/players`)
 - All Elon players across all semesters (not current-only, since h2h spans semesters)
@@ -37,7 +62,7 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 - Memoized `totalSets` and `championsCount` in players list client
 - Removed unused `loser_score`/`winner_score` columns from sets queries in player profile
 - Parallelized rank computation + opponent tag fetch (was 2 sequential calls, now 1 parallel batch)
-- Player profile: 4 sequential DB batches → 3
+- Player profile: 4 sequential DB batches -> 3
 
 ### New Files
 - `src/app/players/page.tsx` — Players directory (Server Component)
@@ -52,7 +77,7 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 
 ---
 
-## 2026-04-02 — Idempotency, Optimization & UX Polish
+## v0.3.0 — Idempotency, Optimization & UX Polish
 
 ### Idempotency Guards
 - `createTournament` — rejects duplicate name + date + semester (prevents manual double-submit)
@@ -65,7 +90,7 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 - Memoized merge dialog filter results (`filteredKeepPlayers`, `filteredMergePlayers`) with `useMemo` instead of inline `.filter().slice()` on every keystroke
 - Cached merge dialog player data — `allPlayersLoaded` flag prevents refetching on every dialog open; invalidated after successful merge
 
-### Bug Fixes (5-Agent Audit)
+### Bug Fixes
 - Fixed merge dialog state not resetting on close (mergeKeepId, mergeMergeId, keepSearch, mergeSearch)
 - Fixed scoring engine `existingResult` not error-checked in step 8
 - Fixed scoring engine lock release error not caught in finally block
@@ -104,7 +129,7 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 
 ---
 
-## 2026-04-01 — Leaderboard Redesign, Auto-Semesters & Query Optimization
+## v0.2.0 — Leaderboard Redesign, Auto-Semesters & Query Optimization
 
 ### Leaderboard Redesign
 - Animated podium with Lucide `Trophy` (1st) and `Medal` (2nd/3rd) icons, gradient glows, and drop shadows
@@ -117,19 +142,19 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 
 ### Auto-Create Semesters
 - `findOrCreateSemester(date, client)` — shared helper used by both manual entry and start.gg import
-- Academic calendar conventions: Spring (Jan 15 – May 15), Summer (May 16 – Aug 15), Fall (Aug 16 – Dec 20)
+- Academic calendar conventions: Spring (Jan 15 - May 15), Summer (May 16 - Aug 15), Fall (Aug 16 - Dec 20)
 - Trims auto-generated range to avoid overlapping existing semesters
 - Duplicate name detection with date-range suffix fallback
 - Added overlap validation to both `createSemester()` and `updateSemester()`
 
 ### Query Optimization
-- **Eliminated N+1 queries in `updateSemester`** — fetches all semesters once + parallelizes all tournament move operations instead of querying per-tournament in a loop
-- **Removed redundant client creation** — `determineSemester()` (created server client via `cookies()`) replaced with direct queries on existing admin client in `createTournament` and `confirmTournamentImport`
-- **Removed dead `determineSemester()` function** — both callers now use `findOrCreateSemester`
-- **Reused batch-fetched data in `deletePlayer`** — added `total_participants` to initial tournament query instead of re-fetching each tournament individually
-- **Leaderboard fallback** — collapsed two sequential semester queries into one sorted query with client-side pick
-- **Minimal column fetches** — semester lookups use `select('id')` instead of `select('*')` in 3 places
-- **`.maybeSingle()` over `.single()`** — `getCurrentSemester`, `deleteTournament`, semester lookups (avoids PGRST116 error handling)
+- Eliminated N+1 queries in `updateSemester` — fetches all semesters once + parallelizes all tournament move operations
+- Removed redundant client creation — `determineSemester()` replaced with direct queries on existing admin client
+- Removed dead `determineSemester()` function
+- Reused batch-fetched data in `deletePlayer` — added `total_participants` to initial tournament query
+- Leaderboard fallback — collapsed two sequential semester queries into one sorted query with client-side pick
+- Minimal column fetches — semester lookups use `select('id')` instead of `select('*')` in 3 places
+- `.maybeSingle()` over `.single()` — avoids PGRST116 error handling
 
 ### Dead Code Removal
 - Removed unused `PlayerSemesterScore` and `GameSet` interfaces from `types.ts`
@@ -137,16 +162,15 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 
 ---
 
-## 2026-04-01 — Performance, Validation & Security Audit
+## v0.1.1 — Performance, Validation & Security Audit
 
 ### Performance Optimizations
 
 **Scoring Engine (`src/lib/scoring.ts`) — Complete Rewrite**
 - Parallel batch operations: all tournament results fetched in parallel (one query per tournament to avoid Supabase's 1000-row default limit)
-- Batched score updates: results with same score value updated in single `WHERE id IN (...)` query (~30 queries instead of ~300)
+- Batched score updates: results with same score value updated in single `WHERE id IN (...)` query
 - Stale score cleanup: deletes leftover scores for players no longer marked Elon
 - NaN/Infinity guards on `computeWeight` and `computeScore`
-- Changed array type from `Promise[]` to `PromiseLike[]` for Supabase query compatibility
 
 **start.gg Import (`src/lib/actions/tournaments.ts`)**
 - Deferred sets import with `after()` from `next/server` — response returns in ~2-3s instead of 15-30s
@@ -154,9 +178,9 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 - Parallel players + semester fetch in `buildImportPreview`
 
 **start.gg Client (`src/lib/startgg.ts`)**
-- Standings perPage: 64 → 100 (fewer pages, stays under 1000-object complexity cap)
-- Sets perPage: 28 → 40
-- Inter-page delay: 750ms → 400ms
+- Standings perPage: 64 -> 100 (fewer pages, stays under 1000-object complexity cap)
+- Sets perPage: 28 -> 40
+- Inter-page delay: 750ms -> 400ms
 
 **Admin Dashboard (`src/app/admin/page.tsx`)**
 - Replaced full row fetches with count-only queries (`{ count: 'exact', head: true }`)
@@ -172,7 +196,6 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 - Lazy player loading: only fetches when Manual Entry tab is activated
 
 **Player Actions (`src/lib/actions/players.ts`)**
-- `deletePlayer`: parallel initial data collection, parallel participant decrements, parallel semester recalcs
 - `mergePlayers`: 6 queries consolidated to 1 parallel round, self-merge prevention
 - `getPlayersWithStatus`: paginated to handle >1000 tournament results
 
@@ -180,18 +203,16 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 - Parallel recalculations in `updateSemester`
 
 ### Data Validation
-
 - All server actions trim and validate inputs (empty gamer tags, empty semester names)
-- Tournament creation validates: name required, date format YYYY-MM-DD, ≥1 participant, finite totalParticipants
+- Tournament creation validates: name required, date format YYYY-MM-DD, >=1 participant, finite totalParticipants
 - Semester date validation: start must be before end (server + client)
 - start.gg import filters out standings with invalid placements
 - Empty gamer tags from start.gg fall back to "Unknown"
 - Scoring engine guards: `computeWeight` and `computeScore` return 0 for NaN/Infinity/negative inputs
 
 ### Security
-
 - Case-insensitive email comparison at all 3 auth checkpoints (proxy, layout, `requireAdmin()`)
-- Migrated `src/middleware.ts` → `src/proxy.ts` (Next.js 16 convention)
+- Migrated `src/middleware.ts` -> `src/proxy.ts` (Next.js 16 convention)
 - Confirmed: RLS policies restrict public to read-only, all mutations use service role
 - Supabase config: email signups disabled, rate limits configured
 
@@ -203,10 +224,10 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 
 ---
 
-## 2026-04-01 — Full MVP Implementation
+## v0.1.0 — Full MVP Implementation
 
 ### What Was Built
-All 4 milestones implemented in a single session:
+All 4 milestones implemented:
 
 **Milestone 1 — Admin + Player Management**
 - Supabase clients: browser, server (SSR with cookies), admin (service role)
@@ -214,12 +235,12 @@ All 4 milestones implemented in a single session:
 - Login page with email/password auth
 - Admin layout with sidebar navigation
 - Admin dashboard with summary stats
-- Player management: list, add, edit, delete, search, Elon status toggle per semester, player merge
+- Player management: list, add, edit, search, Elon status toggle per semester, player merge
 - Semester management: list, add, edit dates, current/past/future badges
 
 **Milestone 2 — Tournament Management**
 - Manual tournament creation with player picker and placements
-- start.gg import: URL → slug → event detection → standings preview → Elon flagging → confirm
+- start.gg import: URL -> slug -> event detection -> standings preview -> Elon flagging -> confirm
 - Set data stored silently from start.gg imports
 - Tournament list with semester filter and delete
 - Semester auto-assignment by tournament date
@@ -264,27 +285,26 @@ All 4 milestones implemented in a single session:
 
 ---
 
-## 2026-04-01 — Project Setup
+## v0.0.1 — Project Setup
 
 ### Decisions Made
-- **Stack confirmed:** Next.js App Router + Tailwind + shadcn/ui + Supabase + Vercel
+- **Stack:** Next.js App Router + Tailwind + shadcn/ui + Supabase + Vercel
 - **Auth:** Single admin email via `ADMIN_EMAIL` env var, Supabase Auth, no registration
-- **Scoring:** Exact weighted average placement formula from original system — not simplified
+- **Scoring:** Exact weighted average placement formula from original system
 - **start.gg imports:** Placements only (no bracket data needed for scoring). Set data stored in `sets` table for future use.
-- **Player merge:** Simple admin merge — select two players, combine into one, keep better placement on conflicts
+- **Player merge:** Select two players, combine into one, keep better placement on conflicts
 - **Semesters:** Auto-generated Fall/Spring with editable date ranges
 - **Database:** Supabase Postgres with RLS (public read, admin write via service role)
 
 ### Documents Created
 - `SCORING_SYSTEM.md` — detailed analysis of the original scoring system
-- `CLAUDE.md` — project instructions and constraints
 - `SPEC.md` — full product requirements and milestones
 - `docs/schema.sql` — complete database schema with RLS policies and seed data
 - `docs/architecture.md` — system overview, request flows, file structure
-- `docs/startgg-api.md` — start.gg GraphQL API reference (all queries, entity model, import flow, rate limits, pitfalls)
+- `docs/startgg-api.md` — start.gg GraphQL API reference
 - `docs/changelog.md` — this file
 
-### Table Names (from original plan → final)
+### Table Names (from original plan -> final)
 | Plan Name | Final Table Name | Reason |
 |-----------|-----------------|--------|
 | semester_player_status | player_semester_status | Reads more naturally |
