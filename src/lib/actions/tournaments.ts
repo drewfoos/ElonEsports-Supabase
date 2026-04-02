@@ -362,18 +362,19 @@ export async function confirmTournamentImport(
       }
     }
 
-    // Match returned players back to standings by startgg ID or gamerTag
+    // Match returned players back to standings via O(1) maps instead of O(n) find
     const created = newPlayers as Player[]
+    const createdByStartggId = new Map<string, string>()
+    const createdByTag = new Map<string, string>()
+    for (const p of created) {
+      for (const sId of p.startgg_player_ids) createdByStartggId.set(sId, p.id)
+      createdByTag.set(p.gamer_tag, p.id)
+    }
     for (const standing of chunk) {
-      const match = created.find((p) => {
-        if (standing.startggPlayerId) {
-          return p.startgg_player_ids.includes(String(standing.startggPlayerId))
-        }
-        return p.gamer_tag === standing.gamerTag
-      })
-      if (match) {
-        playerIdMap.set(standing.key, match.id)
-      }
+      const matchId = standing.startggPlayerId
+        ? createdByStartggId.get(String(standing.startggPlayerId))
+        : createdByTag.get(standing.gamerTag)
+      if (matchId) playerIdMap.set(standing.key, matchId)
     }
   }
 

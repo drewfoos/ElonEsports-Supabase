@@ -23,14 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import type { Player, ImportPreview, StartggEvent } from '@/lib/types'
@@ -615,72 +607,141 @@ function ManualEntryTab({ players: initialPlayers }: { players: Player[] }) {
 // Virtualized standings preview (handles 500+ rows)
 // ---------------------------------------------------------------------------
 
-function StandingsPreview({
+const StandingsPreview = memo(function StandingsPreview({
   standings,
   elonFlags,
+  elonCount,
   onToggleElon,
+  onToggleAll,
 }: {
   standings: ImportPreview['standings']
   elonFlags: Record<string, boolean>
+  elonCount: number
   onToggleElon: (key: string) => void
+  onToggleAll: (checked: boolean) => void
 }) {
   const parentRef = useRef<HTMLDivElement>(null)
+  const [search, setSearch] = useState('')
+  const [filterMode, setFilterMode] = useState<'all' | 'elon' | 'non-elon'>('all')
+
+  const filtered = useMemo(() => {
+    let result = standings
+    if (search) {
+      const lower = search.toLowerCase()
+      result = result.filter((s) => s.gamerTag.toLowerCase().includes(lower))
+    }
+    if (filterMode === 'elon') {
+      result = result.filter((s) => elonFlags[s.key])
+    } else if (filterMode === 'non-elon') {
+      result = result.filter((s) => !elonFlags[s.key])
+    }
+    return result
+  }, [standings, search, filterMode, elonFlags])
+
   const virtualizer = useVirtualizer({
-    count: standings.length,
+    count: filtered.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 44,
     overscan: 20,
   })
 
+  const allChecked = elonCount === standings.length
+  const someChecked = elonCount > 0 && !allChecked
+
   return (
     <div className="rounded-md border">
+      {/* Search + filter bar */}
+      <div className="flex items-center gap-2 border-b px-3 py-2">
+        <input
+          className="flex h-8 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          placeholder="Search players..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="flex gap-1 text-xs">
+          {(['all', 'elon', 'non-elon'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              className={`rounded px-2 py-1 transition-colors ${
+                filterMode === mode
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              onClick={() => setFilterMode(mode)}
+            >
+              {mode === 'all' ? 'All' : mode === 'elon' ? 'Elon' : 'Not Elon'}
+            </button>
+          ))}
+        </div>
+      </div>
       {/* Header */}
-      <div className="flex border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+      <div className="flex items-center border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
         <div className="w-[60px]">Place</div>
         <div className="flex-1">Gamer Tag</div>
         <div className="w-[80px] text-center">Match</div>
-        <div className="w-[80px] text-center">Elon</div>
+        <div className="w-[80px] flex flex-col items-center gap-0.5">
+          <span>Elon</span>
+          <button
+            type="button"
+            className="text-[10px] text-primary hover:underline"
+            onClick={() => onToggleAll(!allChecked)}
+          >
+            {allChecked ? 'clear all' : someChecked ? 'select all' : 'select all'}
+          </button>
+        </div>
       </div>
       {/* Virtualized rows */}
       <div ref={parentRef} className="max-h-[50vh] overflow-y-auto">
-        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const s = standings[virtualRow.index]
-            return (
-              <div
-                key={s.key}
-                className="absolute left-0 flex w-full items-center border-b px-3 py-2 text-sm last:border-b-0"
-                style={{
-                  height: virtualRow.size,
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-              >
-                <div className="w-[60px] font-mono text-muted-foreground">{s.placement}</div>
-                <div className="flex-1 truncate font-medium">{s.gamerTag}</div>
-                <div className="w-[80px] text-center">
-                  {s.existingPlayerId ? (
-                    <Badge variant="secondary" className="text-xs">Existing</Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs">New</Badge>
-                  )}
+        {filtered.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No players match{search ? ` "${search}"` : ''}
+          </p>
+        ) : (
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const s = filtered[virtualRow.index]
+              return (
+                <div
+                  key={s.key}
+                  className="absolute left-0 flex w-full items-center border-b px-3 py-2 text-sm last:border-b-0"
+                  style={{
+                    height: virtualRow.size,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <div className="w-[60px] font-mono text-muted-foreground">{s.placement}</div>
+                  <div className="flex-1 truncate font-medium">{s.gamerTag}</div>
+                  <div className="w-[80px] text-center">
+                    {s.existingPlayerId ? (
+                      <Badge variant="secondary" className="text-xs">Existing</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs">New</Badge>
+                    )}
+                  </div>
+                  <div className="w-[80px] flex justify-center">
+                    <Switch
+                      checked={elonFlags[s.key] ?? false}
+                      onCheckedChange={() => onToggleElon(s.key)}
+                    />
+                  </div>
                 </div>
-                <div className="w-[80px] flex justify-center">
-                  <Switch
-                    checked={elonFlags[s.key] ?? false}
-                    onCheckedChange={() => onToggleElon(s.key)}
-                  />
-                </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
-      <div className="border-t px-3 py-1.5 text-xs text-muted-foreground">
-        {standings.length} participants
+      <div className="flex items-center justify-between border-t px-3 py-1.5 text-xs text-muted-foreground">
+        <span>
+          {filtered.length === standings.length
+            ? `${standings.length} participants`
+            : `${filtered.length} of ${standings.length} participants`}
+        </span>
+        <span className="font-medium">{elonCount} Elon</span>
       </div>
     </div>
   )
-}
+})
 
 // ---------------------------------------------------------------------------
 // start.gg Import Tab
@@ -799,12 +860,28 @@ function StartggImportTab() {
     }
   }
 
-  function toggleElonFlag(key: string) {
+  const toggleElonFlag = useCallback((key: string) => {
     setElonFlags((prev) => ({
       ...prev,
       [key]: !prev[key],
     }))
-  }
+  }, [])
+
+  const toggleAllElon = useCallback((checked: boolean) => {
+    if (!preview) return
+    setElonFlags(() => {
+      const flags: Record<string, boolean> = {}
+      for (const s of preview.standings) {
+        flags[s.key] = checked
+      }
+      return flags
+    })
+  }, [preview])
+
+  const elonCount = useMemo(
+    () => Object.values(elonFlags).filter(Boolean).length,
+    [elonFlags]
+  )
 
   async function handleConfirm() {
     if (!preview) return
@@ -919,7 +996,9 @@ function StartggImportTab() {
           <StandingsPreview
             standings={preview.standings}
             elonFlags={elonFlags}
+            elonCount={elonCount}
             onToggleElon={toggleElonFlag}
+            onToggleAll={toggleAllElon}
           />
 
           <div className="flex justify-end gap-3">
