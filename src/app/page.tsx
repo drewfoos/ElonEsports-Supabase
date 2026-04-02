@@ -20,6 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Trophy, Medal } from 'lucide-react'
 import type { Semester, LeaderboardEntry } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
@@ -423,9 +424,9 @@ export default function LeaderboardPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           {entry.rank <= 3 && (
-                            <span className="text-sm">
-                              {entry.rank === 1 ? '\u{1F947}' : entry.rank === 2 ? '\u{1F948}' : '\u{1F949}'}
-                            </span>
+                            entry.rank === 1
+                              ? <Trophy className="h-4 w-4 text-amber-400" strokeWidth={1.5} />
+                              : <Medal className={`h-4 w-4 ${entry.rank === 2 ? 'text-zinc-300' : 'text-orange-400'}`} strokeWidth={1.5} />
                           )}
                           <span className={entry.rank <= 3 ? 'font-semibold' : 'font-medium'}>
                             {entry.gamer_tag}
@@ -469,8 +470,9 @@ const podiumConfig = {
     border: 'border-amber-400/40',
     glow: 'shadow-[0_0_40px_rgba(251,191,36,0.15)]',
     accent: 'text-amber-400',
-    medal: '\u{1F3C6}',
-    medalSize: 'text-4xl sm:text-5xl',
+    iconColor: 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]',
+    iconSize: 'h-10 w-10 sm:h-12 sm:w-12',
+    iconType: 'trophy' as const,
     label: '1st',
     nameClass: 'text-base sm:text-lg font-bold',
   },
@@ -481,8 +483,9 @@ const podiumConfig = {
     border: 'border-zinc-400/30',
     glow: 'shadow-[0_0_30px_rgba(161,161,170,0.1)]',
     accent: 'text-zinc-300',
-    medal: '\u{1F948}',
-    medalSize: 'text-3xl sm:text-4xl',
+    iconColor: 'text-zinc-300 drop-shadow-[0_0_8px_rgba(161,161,170,0.4)]',
+    iconSize: 'h-8 w-8 sm:h-10 sm:w-10',
+    iconType: 'medal' as const,
     label: '2nd',
     nameClass: 'text-sm sm:text-base font-semibold',
   },
@@ -493,8 +496,9 @@ const podiumConfig = {
     border: 'border-orange-400/30',
     glow: 'shadow-[0_0_30px_rgba(251,146,60,0.1)]',
     accent: 'text-orange-400',
-    medal: '\u{1F949}',
-    medalSize: 'text-3xl sm:text-4xl',
+    iconColor: 'text-orange-400 drop-shadow-[0_0_8px_rgba(251,146,60,0.4)]',
+    iconSize: 'h-8 w-8 sm:h-10 sm:w-10',
+    iconType: 'medal' as const,
     label: '3rd',
     nameClass: 'text-sm sm:text-base font-semibold',
   },
@@ -526,12 +530,17 @@ function PodiumCard({
         animation: `podiumRise 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) ${delay}s both`,
       }}
     >
-      {/* Medal */}
-      <span className={`${cfg.medalSize} drop-shadow-lg`}
+      {/* Icon */}
+      <div
+        className={cfg.iconColor}
         style={{ animation: `shimmer 2s ease-in-out ${delay + 0.6}s both` }}
       >
-        {cfg.medal}
-      </span>
+        {cfg.iconType === 'trophy' ? (
+          <Trophy className={cfg.iconSize} strokeWidth={1.5} />
+        ) : (
+          <Medal className={cfg.iconSize} strokeWidth={1.5} />
+        )}
+      </div>
 
       {/* Place label */}
       <span className={`mt-1 text-xs font-bold uppercase tracking-widest ${cfg.accent}`}>
