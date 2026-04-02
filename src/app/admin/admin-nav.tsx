@@ -39,7 +39,7 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="px-4 py-5">
-        <h1 className="text-lg font-bold text-foreground">Elon Esports</h1>
+        <Link href="/" className="text-lg font-bold text-foreground hover:text-amber-400 transition-colors">Elon Esports</Link>
         <p className="mt-1 truncate text-xs text-muted-foreground">{userEmail}</p>
       </div>
 
@@ -87,7 +87,7 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
     <>
       {/* Mobile header bar */}
       <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
-        <h1 className="text-sm font-bold text-foreground">Elon Esports Admin</h1>
+        <Link href="/" className="text-sm font-bold text-foreground hover:text-amber-400 transition-colors">Elon Esports Admin</Link>
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
