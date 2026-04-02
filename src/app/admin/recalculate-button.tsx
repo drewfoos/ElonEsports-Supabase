@@ -68,7 +68,9 @@ export function RecalculateButton({ semesters }: { semesters: Semester[] }) {
           <div className="py-4">
             <Select value={selectedId} onValueChange={(v) => { if (v) setSelectedId(v) }}>
               <SelectTrigger>
-                <SelectValue placeholder="Select a semester" />
+                <SelectValue placeholder="Select a semester">
+                  {semesters.find(s => s.id === selectedId)?.name}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {semesters.map(s => (

@@ -608,9 +608,11 @@ export default function PlayersPage() {
         </div>
         <div className="flex items-center gap-2">
           <Label className="text-sm text-muted-foreground">Status</Label>
-          <Select value={elonFilter} onValueChange={(v) => setElonFilter(v as ElonFilter)}>
+          <Select value={elonFilter} onValueChange={(v) => { if (v) setElonFilter(v as ElonFilter) }}>
             <SelectTrigger className="w-[140px]">
-              <SelectValue />
+              <SelectValue>
+                {elonFilter === 'elon' ? 'Elon Only' : elonFilter === 'non-elon' ? 'Non-Elon' : 'All Players'}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all" label="All Players">All Players</SelectItem>
