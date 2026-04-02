@@ -54,6 +54,10 @@ export async function updateSemester(
 
   const supabase = createAdminClient()
 
+  // Check for overlap with other semesters
+  const overlapError = await checkSemesterOverlap(supabase, startDate, endDate, id)
+  if (overlapError) return { error: overlapError }
+
   // Get the old date range so we can find tournaments that need reassignment
   const { data: oldSemester, error: oldError } = await supabase
     .from('semesters')
@@ -153,6 +157,10 @@ export async function createSemester(
 
   const supabase = createAdminClient()
 
+  // Check for overlap with existing semesters
+  const overlapError = await checkSemesterOverlap(supabase, startDate, endDate)
+  if (overlapError) return { error: overlapError }
+
   const { data, error } = await supabase
     .from('semesters')
     .insert({ name: trimmedName, start_date: startDate, end_date: endDate })
@@ -165,4 +173,159 @@ export async function createSemester(
 
   revalidatePath('/admin/semesters')
   return data as Semester
+}
+
+// ---------------------------------------------------------------------------
+// Overlap check helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns an error message if the given date range overlaps any existing semester,
+ * or null if there's no overlap. Optionally exclude a semester by ID (for updates).
+ */
+async function checkSemesterOverlap(
+  client: ReturnType<typeof createAdminClient>,
+  startDate: string,
+  endDate: string,
+  excludeId?: string
+): Promise<string | null> {
+  // Two ranges [A, B] and [C, D] overlap when A <= D AND C <= B
+  let query = client
+    .from('semesters')
+    .select('id, name, start_date, end_date')
+    .lte('start_date', endDate)
+    .gte('end_date', startDate)
+
+  if (excludeId) {
+    query = query.neq('id', excludeId)
+  }
+
+  const { data: overlapping } = await query
+
+  if (overlapping && overlapping.length > 0) {
+    const names = overlapping.map(s => `"${s.name}"`).join(', ')
+    return `Date range overlaps with existing semester${overlapping.length > 1 ? 's' : ''}: ${names}.`
+  }
+
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// Auto-create semester for a tournament date
+// ---------------------------------------------------------------------------
+
+/**
+ * Find a semester covering the given date, or auto-create one based on
+ * academic calendar conventions. Returns the semester ID.
+ *
+ * Academic periods:
+ *   Spring: Jan 15 – May 15
+ *   Summer: May 16 – Aug 15
+ *   Fall:   Aug 16 – Dec 20
+ *
+ * If the auto-generated range would overlap an existing semester, the range
+ * is trimmed to fit (start after the overlapping semester ends, or end before
+ * it starts).
+ */
+export async function findOrCreateSemester(
+  date: string,
+  client: ReturnType<typeof createAdminClient>
+): Promise<{ id: string } | { error: string }> {
+  // Try to find existing semester first
+  const { data: existing } = await client
+    .from('semesters')
+    .select('id')
+    .lte('start_date', date)
+    .gte('end_date', date)
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) return { id: existing.id }
+
+  // Auto-create based on academic calendar
+  const d = new Date(date + 'T00:00:00')
+  const year = d.getFullYear()
+  const month = d.getMonth() + 1 // 1-indexed
+  const day = d.getDate()
+
+  let name: string
+  let startDate: string
+  let endDate: string
+
+  if (month <= 5 && (month < 5 || day <= 15)) {
+    // Spring: Jan 15 – May 15
+    name = `Spring ${year}`
+    startDate = `${year}-01-15`
+    endDate = `${year}-05-15`
+  } else if (month <= 8 && (month < 8 || day <= 15)) {
+    // Summer: May 16 – Aug 15
+    name = `Summer ${year}`
+    startDate = `${year}-05-16`
+    endDate = `${year}-08-15`
+  } else {
+    // Fall: Aug 16 – Dec 20
+    name = `Fall ${year}`
+    startDate = `${year}-08-16`
+    endDate = `${year}-12-20`
+  }
+
+  // Check for overlapping semesters and trim the range to avoid conflicts
+  const { data: overlapping } = await client
+    .from('semesters')
+    .select('id, name, start_date, end_date')
+    .lte('start_date', endDate)
+    .gte('end_date', startDate)
+
+  if (overlapping && overlapping.length > 0) {
+    // Sort by start_date
+    const sorted = overlapping.sort((a, b) => a.start_date.localeCompare(b.start_date))
+
+    // Find the gap where our date fits
+    // The date doesn't fall in any existing semester, so it must be in a gap
+    for (const sem of sorted) {
+      if (date < sem.start_date && startDate < sem.start_date) {
+        // Our date is before this semester — trim endDate to day before it starts
+        const dayBefore = new Date(sem.start_date + 'T00:00:00')
+        dayBefore.setDate(dayBefore.getDate() - 1)
+        endDate = dayBefore.toISOString().split('T')[0]
+        break
+      }
+      if (date > sem.end_date) {
+        // Our date is after this semester — trim startDate to day after it ends
+        const dayAfter = new Date(sem.end_date + 'T00:00:00')
+        dayAfter.setDate(dayAfter.getDate() + 1)
+        startDate = dayAfter.toISOString().split('T')[0]
+      }
+    }
+
+    // Final sanity check: date must still be within the trimmed range
+    if (date < startDate || date > endDate || startDate >= endDate) {
+      return { error: `Cannot auto-create semester for ${date} — overlapping semesters leave no room. Adjust existing semester dates first.` }
+    }
+  }
+
+  // Check for duplicate name and append suffix if needed
+  const { data: nameCheck } = await client
+    .from('semesters')
+    .select('id')
+    .eq('name', name)
+    .limit(1)
+    .maybeSingle()
+
+  if (nameCheck) {
+    name = `${name} (${startDate} – ${endDate})`
+  }
+
+  const { data: created, error } = await client
+    .from('semesters')
+    .insert({ name, start_date: startDate, end_date: endDate })
+    .select('id')
+    .single()
+
+  if (error) {
+    return { error: `Failed to auto-create semester: ${error.message}` }
+  }
+
+  revalidatePath('/admin/semesters')
+  return { id: created.id }
 }

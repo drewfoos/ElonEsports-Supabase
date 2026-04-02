@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/actions/auth'
 import { recalculateSemester } from '@/lib/scoring'
+import { findOrCreateSemester } from '@/lib/actions/semesters'
 import {
   extractSlugs,
   fetchTournamentEvents,
@@ -134,18 +135,10 @@ export async function createTournament(data: {
     }
   }
 
-  // Semester lookup using existing admin client
-  const { data: semester } = await admin
-    .from('semesters')
-    .select('id')
-    .lte('start_date', data.date)
-    .gte('end_date', data.date)
-    .limit(1)
-    .maybeSingle()
-
-  if (!semester) {
-    return { error: `No semester covers the date ${data.date}. Create or adjust a semester first.` }
-  }
+  // Find or auto-create semester for this date
+  const semesterResult = await findOrCreateSemester(data.date, admin)
+  if ('error' in semesterResult) return semesterResult
+  const semester = semesterResult
 
   // Insert tournament
   const { data: tournament, error: tournamentError } = await admin
@@ -290,15 +283,9 @@ export async function confirmTournamentImport(
     }
   }
 
-  // Parallel: semester lookup + duplicate check (reuse admin client, no extra cookies() call)
+  // Parallel: semester lookup/auto-create + duplicate check
   const [semesterResult, duplicateResult] = await Promise.all([
-    admin
-      .from('semesters')
-      .select('id')
-      .lte('start_date', preview.tournamentDate)
-      .gte('end_date', preview.tournamentDate)
-      .limit(1)
-      .maybeSingle(),
+    findOrCreateSemester(preview.tournamentDate, admin),
     preview.eventId
       ? admin
           .from('tournaments')
@@ -308,10 +295,8 @@ export async function confirmTournamentImport(
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ])
 
-  const semester = semesterResult.data as { id: string } | null
-  if (!semester) {
-    return { error: `No semester covers the tournament date ${preview.tournamentDate}. Create or adjust a semester first.` }
-  }
+  if ('error' in semesterResult) return semesterResult
+  const semester = semesterResult
 
   const existingImport = (duplicateResult as { data: { id: string; name: string }[] | null }).data
   if (existingImport && existingImport.length > 0) {
