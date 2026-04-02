@@ -81,6 +81,8 @@ Every tournament gets a **weight** based on what fraction of the field was Elon 
 weight = elonParticipants / totalParticipants
 ```
 
+> **Note:** The original system divided by `totalElonStudents` as a normalization factor (`weight = (elon/total) / totalElonStudents`). This was removed because it meant adding a new Elon student who hadn't played any tournaments would change every player's scores across the entire semester. The current formula only depends on each tournament's own participant mix, making weights stable and recalculations more predictable.
+
 **What this means:**
 - A tournament that's mostly Elon students → higher weight (placements count more)
 - A big open bracket where Elon is a tiny fraction → lower weight (just showing up is rewarded)
