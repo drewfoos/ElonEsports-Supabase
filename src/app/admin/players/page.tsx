@@ -115,10 +115,18 @@ const AllPlayerRow = React.memo(function AllPlayerRow({
       </TableCell>
       <TableCell>
         {player.elon_semesters.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {player.elon_semesters.map(name => (
+          <div className="flex items-center gap-1">
+            {player.elon_semesters.slice(0, 2).map(name => (
               <Badge key={name} variant="default" className="text-xs">{name}</Badge>
             ))}
+            {player.elon_semesters.length > 2 && (
+              <span
+                className="cursor-default rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                title={player.elon_semesters.join(', ')}
+              >
+                +{player.elon_semesters.length - 2}
+              </span>
+            )}
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">None</span>
