@@ -58,10 +58,11 @@ average = sum(scores) / tournaments_played
 
 ### Player Management
 
-- Add, edit, delete, search players
-- Toggle Elon student status per semester (optimistic UI)
-- Merge duplicate players — keeps best placement on conflicts, combines start.gg IDs
+- Add, edit, and search players
+- Toggle Elon student status per semester (optimistic UI) — recalculates that semester's scores
+- Merge duplicate players — keeps best placement on conflicts, combines start.gg IDs, preserves tournament participant counts
 - Link multiple start.gg accounts to one player
+- No player deletion — prevents distorting tournament history
 
 ### Semester Management
 
@@ -73,7 +74,8 @@ average = sum(scores) / tournaments_played
 ### Data Safety
 
 - **Idempotency** — all create operations detect duplicates (tournament name+date, player tag, semester name, start.gg event ID)
-- **Concurrency** — advisory locks prevent concurrent semester recalculations; atomic SQL decrements avoid participant count races
+- **Concurrency** — advisory locks prevent concurrent semester recalculations
+- **No deletion** — players cannot be deleted (only merged); tournament participant counts are never decremented
 - **Overlap validation** — semester date ranges cannot overlap (enforced server-side on create and update)
 - **Error boundaries** — 404, 500, and global error pages with recovery actions
 

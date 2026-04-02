@@ -112,12 +112,15 @@ Browser → GET /players/[playerId]
 Admin → POST updatePlayerElonStatus(playerId, semesterId, isElon)
      → Verify session + ADMIN_EMAIL
      → Upsert player_semester_status
-     → Call recalculateSemester(semesterId)
-       → totalElonStudents changes → ALL weights change → ALL scores change
+     → Call recalculateSemester(semesterId) — this semester ONLY
+       → Recomputes elon_participants + weight for every tournament in semester
+       → Recomputes all result scores and player_semester_scores
      → Return success
 ```
 
 UI uses optimistic toggle — switch flips instantly, reverts on error.
+
+> Players cannot be deleted — only merged or left inactive. This prevents distorting tournament history.
 
 ### Admin: Merge Players
 
@@ -127,6 +130,7 @@ Admin → POST mergePlayers(keepId, mergeId)
      → Parallel: fetch all data upfront (6 queries in 1 round trip)
      → Reassign tournament_results: mergeId → keepId
        → If conflict (both in same tournament), keep better placement
+       → total_participants NOT decremented (same person tracked twice)
      → Reassign player_semester_status: mergeId → keepId
        → If conflict, prefer is_elon_student = true
      → Append mergeId's startgg_player_ids to keepId
@@ -156,7 +160,6 @@ Admin → POST mergePlayers(keepId, mergeId)
 - **Minimal column fetches** — semester lookups use `select('id')` instead of `select('*')` when only the ID is needed
 - **`.maybeSingle()` over `.single()`** — for optional lookups (semester by date, tournament by ID) to avoid PGRST116 error handling
 - **Parallel tournament reassignment** — `updateSemester` fetches all semesters once and runs all move operations in parallel instead of N+1 sequential queries
-- **Batch reuse** — `deletePlayer` reuses already-fetched tournament data for participant count decrements instead of re-querying each tournament
 
 ### Admin Pages
 
@@ -196,8 +199,9 @@ All create operations include duplicate detection to prevent accidental double-s
 ## Concurrency Safety
 
 - **Advisory locks** — `recalculateSemester` acquires a per-semester `pg_try_advisory_lock` before recalculating; if another recalc is in progress, skips silently
-- **Atomic decrements** — `decrement_participants` Postgres function uses `SET total_participants = greatest(0, total_participants - N)` to avoid read-then-write races
 - **Lock release** — always in `finally` block; release errors logged but don't fail the operation
+- **No player deletion** — players can only be merged or left inactive, preventing tournament history distortion
+- **Merge preserves counts** — `total_participants` is never decremented on merge conflicts (same person tracked twice)
 
 ## Error Handling
 

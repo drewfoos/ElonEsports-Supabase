@@ -127,31 +127,30 @@ The public leaderboard has a **minimum tournament count** filter (default 3, adj
 The scoring engine (`src/lib/scoring.ts`) performs a full semester recalculation when:
 
 - A tournament is added or deleted
-- A player's Elon status is changed
-- A player is deleted (all affected semesters recalculated)
-- Players are merged
-- Semester dates change (tournaments may shift between semesters)
+- A player's Elon status is toggled (recalculates that semester only)
+- Players are merged (recalculates all affected semesters in parallel)
+- Semester dates change (tournaments may shift between semesters — both old and new semesters recalculated)
 - The admin manually clicks the Recalculate button (on dashboard or tournaments page)
 
-The recalculation:
-1. Fetches all Elon player IDs for the semester
-2. For each tournament: counts Elon participants, computes weight, updates tournament record
-3. For each tournament result: computes score (placement × weight), batches updates by score value
-4. Deletes all existing `player_semester_scores` for the semester
-5. Inserts new scores: total_score, tournament_count, average_score per Elon player
-6. Cleans up stale scores for players no longer marked Elon
+> **Note:** Players cannot be deleted. Duplicates should be merged, and inactive players can be left alone — they won't appear on leaderboards if they have no tournament results.
 
-### What Happens When a Player Is Deleted
+### What Recalculation Does
 
-Deleting a player triggers FK cascades in the database:
-- `tournament_results` → **CASCADE** — their results are removed from all tournaments
-- `player_semester_status` → **CASCADE** — their Elon status records are removed
-- `player_semester_scores` → **CASCADE** — their semester scores are removed
-- `sets` (winner/loser) → **SET NULL** — set records are preserved but player references become null
+1. Acquires a per-semester advisory lock (skips if another recalc is in progress)
+2. Fetches all Elon player IDs for the semester
+3. For each tournament in the semester: counts Elon participants from results, computes weight, updates the tournament's `weight` and `elon_participants` fields
+4. For each tournament result: computes `score = placement × weight`, batches updates by score value
+5. Computes `player_semester_scores` from in-memory data (no re-fetch)
+6. Upserts new scores: `total_score`, `tournament_count`, `average_score` per Elon player
+7. Cleans up stale scores for players no longer in the computed set
 
-The tournament's `total_participants` is **not decremented** — the tournament still had that many players regardless of whether we later delete one from the system. The recalculation updates `elon_participants` from the remaining results, so if the deleted player was Elon, the weight adjusts (fewer Elon participants / same total). This is correct: the tournament difficulty hasn't changed, only who we're tracking.
+### Elon Status Toggle
 
-> **Note:** Player deletion is primarily a testing/cleanup tool. In production, duplicates should be merged rather than deleted, and inactive players can simply be left alone — they won't appear on leaderboards if they have no tournament results.
+When a player is toggled Elon/non-Elon for a semester, the recalculation updates **all tournaments in that semester** because `elon_participants` (and therefore the weight) changes for every tournament the player was in. Recalculation is scoped to that single semester — other semesters are unaffected.
+
+### Player Merge
+
+When merging Player B into Player A, `total_participants` is **not decremented** on conflict tournaments. The merged players were the same person tracked twice — the tournament's actual participant count hasn't changed. The recalculation correctly recomputes `elon_participants` from the remaining results.
 
 **Concurrency safety:** Each recalculation acquires a per-semester advisory lock (`pg_try_advisory_lock`). If another recalc is already in progress for the same semester, the call skips silently.
 
