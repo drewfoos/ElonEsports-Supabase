@@ -322,6 +322,71 @@ export async function deletePlayer(
   return { success: true }
 }
 
+export async function deletePlayers(
+  ids: string[]
+): Promise<{ success: true; deleted: number } | { error: string }> {
+  await requireAdmin()
+  if (ids.length === 0) return { success: true, deleted: 0 }
+
+  const supabase = createAdminClient()
+
+  // Collect all affected data in parallel before deleting
+  const [statusesRes, resultsRes] = await Promise.all([
+    supabase.from('player_semester_status').select('semester_id').in('player_id', ids),
+    supabase.from('tournament_results').select('tournament_id, player_id').in('player_id', ids),
+  ])
+
+  const affectedSemesterIds = new Set<string>()
+  for (const s of statusesRes.data ?? []) affectedSemesterIds.add(s.semester_id)
+
+  // Count how many of the selected players are in each tournament (for participant decrement)
+  const tournamentPlayerCounts = new Map<string, number>()
+  for (const r of resultsRes.data ?? []) {
+    tournamentPlayerCounts.set(r.tournament_id, (tournamentPlayerCounts.get(r.tournament_id) ?? 0) + 1)
+  }
+
+  let tournamentRows: { id: string; total_participants: number; semester_id: string }[] = []
+  const affectedTournamentIds = [...tournamentPlayerCounts.keys()]
+  if (affectedTournamentIds.length > 0) {
+    const { data: tournaments } = await supabase
+      .from('tournaments')
+      .select('id, semester_id, total_participants')
+      .in('id', affectedTournamentIds)
+    tournamentRows = (tournaments ?? []) as typeof tournamentRows
+    for (const t of tournamentRows) affectedSemesterIds.add(t.semester_id)
+  }
+
+  // Delete all players in one query (FK cascade handles results + statuses)
+  const { error } = await supabase
+    .from('players')
+    .delete()
+    .in('id', ids)
+
+  if (error) return { error: error.message }
+
+  // Decrement total_participants per tournament by how many deleted players were in it
+  if (tournamentRows.length > 0) {
+    const decrements = tournamentRows
+      .map(t => {
+        const removed = tournamentPlayerCounts.get(t.id) ?? 0
+        const newCount = Math.max(0, t.total_participants - removed)
+        return newCount !== t.total_participants
+          ? supabase.from('tournaments').update({ total_participants: newCount }).eq('id', t.id)
+          : null
+      })
+      .filter(Boolean) as PromiseLike<unknown>[]
+    if (decrements.length > 0) await Promise.all(decrements)
+  }
+
+  // Recalculate all affected semesters
+  await Promise.all(
+    [...affectedSemesterIds].map(semId => recalculateSemester(semId, supabase))
+  )
+
+  revalidatePath('/admin/players')
+  return { success: true, deleted: ids.length }
+}
+
 export async function updatePlayerElonStatus(
   playerId: string,
   semesterId: string,
