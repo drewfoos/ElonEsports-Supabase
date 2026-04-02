@@ -478,6 +478,7 @@ export default function PlayersPage() {
   const [mergeMergeId, setMergeMergeId] = useState('')
   const [mergeLoading, setMergeLoading] = useState(false)
   const [allPlayers, setAllPlayers] = useState<(Player & { tournament_count: number })[]>([])
+  const [allPlayersLoaded, setAllPlayersLoaded] = useState(false)
   const [keepSearch, setKeepSearch] = useState('')
   const [mergeSearch, setMergeSearch] = useState('')
 
@@ -658,11 +659,29 @@ export default function PlayersPage() {
     }
   }
 
+  // Memoize merge dialog filter results
+  const filteredKeepPlayers = useMemo(() => {
+    const lower = keepSearch.toLowerCase()
+    return allPlayers
+      .filter(p => p.id !== mergeMergeId && (!lower || p.gamer_tag.toLowerCase().includes(lower)))
+      .slice(0, 50)
+  }, [allPlayers, keepSearch, mergeMergeId])
+
+  const filteredMergePlayers = useMemo(() => {
+    const lower = mergeSearch.toLowerCase()
+    return allPlayers
+      .filter(p => p.id !== mergeKeepId && (!lower || p.gamer_tag.toLowerCase().includes(lower)))
+      .slice(0, 50)
+  }, [allPlayers, mergeSearch, mergeKeepId])
+
   async function openMergeDialog() {
     setMergeOpen(true)
-    const data = await getPlayersWithTournamentCount()
-    if (!('error' in data)) {
-      setAllPlayers(data)
+    if (!allPlayersLoaded) {
+      const data = await getPlayersWithTournamentCount()
+      if (!('error' in data)) {
+        setAllPlayers(data)
+        setAllPlayersLoaded(true)
+      }
     }
   }
 
@@ -680,6 +699,7 @@ export default function PlayersPage() {
         setMergeMergeId('')
         setKeepSearch('')
         setMergeSearch('')
+        setAllPlayersLoaded(false)
         triggerRefresh()
       }
     } finally {
@@ -984,10 +1004,7 @@ export default function PlayersPage() {
                   <CommandList className="max-h-64">
                     <CommandEmpty>No players found.</CommandEmpty>
                     <CommandGroup>
-                      {allPlayers
-                        .filter(p => p.id !== mergeMergeId && p.gamer_tag.toLowerCase().includes(keepSearch.toLowerCase()))
-                        .slice(0, 50)
-                        .map(p => (
+                      {filteredKeepPlayers.map(p => (
                           <CommandItem
                             key={p.id}
                             value={p.id}
@@ -1046,10 +1063,7 @@ export default function PlayersPage() {
                   <CommandList className="max-h-64">
                     <CommandEmpty>No players found.</CommandEmpty>
                     <CommandGroup>
-                      {allPlayers
-                        .filter(p => p.id !== mergeKeepId && p.gamer_tag.toLowerCase().includes(mergeSearch.toLowerCase()))
-                        .slice(0, 50)
-                        .map(p => (
+                      {filteredMergePlayers.map(p => (
                           <CommandItem
                             key={p.id}
                             value={p.id}

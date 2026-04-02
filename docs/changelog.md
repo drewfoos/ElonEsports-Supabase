@@ -4,7 +4,18 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 
 ---
 
-## 2026-04-02 — Bug Fixes, Error Pages, Performance & UX Polish
+## 2026-04-02 — Idempotency, Optimization & UX Polish
+
+### Idempotency Guards
+- `createTournament` — rejects duplicate name + date + semester (prevents manual double-submit)
+- `createPlayer` — rejects duplicate gamer tags (case-insensitive)
+- `createSemester` — rejects duplicate names (case-insensitive, checked in parallel with overlap validation)
+- `confirmTournamentImport` — already had `startgg_event_id` deduplication (no change needed)
+
+### React Optimization
+- Fixed drag handler closures in manual tournament creator defeating `React.memo` — callbacks now stable via `useCallback` with index passed as prop
+- Memoized merge dialog filter results (`filteredKeepPlayers`, `filteredMergePlayers`) with `useMemo` instead of inline `.filter().slice()` on every keystroke
+- Cached merge dialog player data — `allPlayersLoaded` flag prevents refetching on every dialog open; invalidated after successful merge
 
 ### Bug Fixes (5-Agent Audit)
 - Fixed merge dialog state not resetting on close (mergeKeepId, mergeMergeId, keepSearch, mergeSearch)

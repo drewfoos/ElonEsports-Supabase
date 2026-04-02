@@ -161,9 +161,19 @@ export async function createSemester(
 
   const supabase = createAdminClient()
 
-  // Check for overlap with existing semesters
-  const overlapError = await checkSemesterOverlap(supabase, startDate, endDate)
+  // Parallel: check overlap + duplicate name
+  const [overlapError, { data: nameExists }] = await Promise.all([
+    checkSemesterOverlap(supabase, startDate, endDate),
+    supabase
+      .from('semesters')
+      .select('id')
+      .ilike('name', trimmedName)
+      .limit(1)
+      .maybeSingle(),
+  ])
+
   if (overlapError) return { error: overlapError }
+  if (nameExists) return { error: `A semester named "${trimmedName}" already exists.` }
 
   const { data, error } = await supabase
     .from('semesters')

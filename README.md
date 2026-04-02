@@ -59,6 +59,13 @@ average = sum(scores) / tournaments_played
 - Tournaments auto-reassign when semester dates change
 - Scores recalculate automatically on any data change
 
+### Data Safety
+
+- **Idempotency** — all create operations detect duplicates (tournament name+date, player tag, semester name, start.gg event ID)
+- **Concurrency** — advisory locks prevent concurrent semester recalculations; atomic SQL decrements avoid participant count races
+- **Overlap validation** — semester date ranges cannot overlap (enforced server-side on create and update)
+- **Error boundaries** — 404, 500, and global error pages with recovery actions
+
 ## Stack
 
 | Layer | Technology |
@@ -123,7 +130,11 @@ average = sum(scores) / tournaments_played
 ```
 src/
 ├── app/
-│   ├── page.tsx                   # Public leaderboard (fireworks, podium, table)
+│   ├── page.tsx                   # Public leaderboard (SSR, parallel fetch)
+│   ├── leaderboard-client.tsx     # Interactive leaderboard UI (fireworks, podium)
+│   ├── not-found.tsx              # 404 page
+│   ├── error.tsx                  # Runtime error boundary
+│   ├── global-error.tsx           # Root error boundary
 │   ├── login/page.tsx             # Admin login
 │   ├── admin/                     # Admin pages (dashboard, players, tournaments, semesters)
 │   └── api/leaderboard/route.ts   # Public API endpoint

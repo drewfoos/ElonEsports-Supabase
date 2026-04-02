@@ -62,6 +62,7 @@ Admin → POST createTournament server action
        → If none: auto-create based on academic calendar
          (Spring Jan-May, Summer May-Aug, Fall Aug-Dec)
        → Trim range if overlapping neighbors exist
+     → Duplicate check: same name + date + semester → reject
      → Insert tournament + tournament_results rows
      → Call recalculateSemester(semesterId)
      → Return success
@@ -157,6 +158,18 @@ Admin → POST mergePlayers(keepId, mergeId)
 - **Single semester query** — collapsed two sequential fallback queries into one sorted query with client-side pick
 - **Canvas fireworks** — particle system with gravity, glow trails, and staggered bursts; auto-cleans up after animation
 - **Staggered animations** — podium cards bounce in sequentially, table rows fade in with delay offsets
+
+## Idempotency
+
+All create operations include duplicate detection to prevent accidental double-submits:
+
+| Operation | Duplicate Key | Behavior |
+|-----------|--------------|----------|
+| `createTournament` | name + date + semester | Rejects with error message |
+| `createPlayer` | gamer_tag (case-insensitive) | Rejects with error message |
+| `createSemester` | name (case-insensitive) | Rejects with error message |
+| `confirmTournamentImport` | `startgg_event_id` | Rejects with error message |
+| `createSemester` (dates) | date range overlap | Rejects with overlapping semester names |
 
 ## Concurrency Safety
 

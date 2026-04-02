@@ -140,6 +140,20 @@ export async function createTournament(data: {
   if ('error' in semesterResult) return semesterResult
   const semester = semesterResult
 
+  // Duplicate check: same name + date + semester (prevents double-submit)
+  const { data: existing } = await admin
+    .from('tournaments')
+    .select('id')
+    .eq('name', trimmedName)
+    .eq('date', data.date)
+    .eq('semester_id', semester.id)
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) {
+    return { error: `A tournament named "${trimmedName}" already exists on ${data.date}.` }
+  }
+
   // Insert tournament
   const { data: tournament, error: tournamentError } = await admin
     .from('tournaments')

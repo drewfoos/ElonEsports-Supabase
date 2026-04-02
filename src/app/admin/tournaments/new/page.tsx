@@ -241,6 +241,7 @@ const PlayerPicker = memo(function PlayerPicker({
 
 const ParticipantRowItem = memo(function ParticipantRowItem({
   row,
+  index,
   placement,
   isNewTier,
   isDragging,
@@ -257,6 +258,7 @@ const ParticipantRowItem = memo(function ParticipantRowItem({
   row: ParticipantRow
   placement: number
   isNewTier: boolean
+  index: number
   isDragging: boolean
   isDragOver: boolean
   playerMap: Map<string, Player>
@@ -264,8 +266,8 @@ const ParticipantRowItem = memo(function ParticipantRowItem({
   onUpdate: (rowId: string, field: Partial<ParticipantRow>) => void
   onRemove: (rowId: string) => void
   onCreate: (rowId: string, gamerTag: string) => Promise<void>
-  onDragStart: () => void
-  onDragOver: (e: React.DragEvent) => void
+  onDragStart: (idx: number) => void
+  onDragOver: (idx: number, e: React.DragEvent) => void
   onDragEnd: () => void
 }) {
   const handleChange = useCallback(
@@ -280,13 +282,16 @@ const ParticipantRowItem = memo(function ParticipantRowItem({
 
   const handleRemove = useCallback(() => onRemove(row.id), [onRemove, row.id])
 
+  const handleDragStart = useCallback(() => onDragStart(index), [onDragStart, index])
+  const handleDragOver = useCallback((e: React.DragEvent) => onDragOver(index, e), [onDragOver, index])
+
   return (
     <div>
       {isNewTier && <div className="my-1 border-t border-dashed border-muted-foreground/25" />}
       <div
         draggable
-        onDragStart={onDragStart}
-        onDragOver={onDragOver}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={onDragEnd}
         className={`flex items-center gap-3 rounded-md border p-2 transition-colors ${
           isDragging
@@ -406,6 +411,24 @@ function ManualEntryTab({ players: initialPlayers }: { players: Player[] }) {
       return next
     })
   }, [])
+
+  // Stable drag callbacks — pass index from child, avoid per-row closures
+  const handleDragStart = useCallback((idx: number) => setDragIdx(idx), [])
+  const handleDragOver = useCallback((idx: number, e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOverIdx(idx)
+  }, [])
+  const handleDragEnd = useCallback(() => {
+    setDragIdx((prevDragIdx) => {
+      setDragOverIdx((prevDragOverIdx) => {
+        if (prevDragIdx !== null && prevDragOverIdx !== null && prevDragIdx !== prevDragOverIdx) {
+          moveParticipant(prevDragIdx, prevDragOverIdx)
+        }
+        return null
+      })
+      return null
+    })
+  }, [moveParticipant])
 
   // Inline player creation — stable callback for memoized rows
   const handleCreatePlayer = useCallback(async (rowId: string, gamerTag: string) => {
@@ -558,6 +581,7 @@ function ManualEntryTab({ players: initialPlayers }: { players: Player[] }) {
               <ParticipantRowItem
                 key={row.id}
                 row={row}
+                index={idx}
                 placement={placements[idx]}
                 isNewTier={idx > 0 && placements[idx] !== placements[idx - 1]}
                 isDragging={dragIdx === idx}
@@ -567,15 +591,9 @@ function ManualEntryTab({ players: initialPlayers }: { players: Player[] }) {
                 onUpdate={updateParticipant}
                 onRemove={removeParticipant}
                 onCreate={handleCreatePlayer}
-                onDragStart={() => setDragIdx(idx)}
-                onDragOver={(e: React.DragEvent) => { e.preventDefault(); setDragOverIdx(idx) }}
-                onDragEnd={() => {
-                  if (dragIdx !== null && dragOverIdx !== null && dragIdx !== dragOverIdx) {
-                    moveParticipant(dragIdx, dragOverIdx)
-                  }
-                  setDragIdx(null)
-                  setDragOverIdx(null)
-                }}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
               />
             ))}
           </div>

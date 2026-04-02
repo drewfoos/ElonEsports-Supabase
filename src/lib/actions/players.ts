@@ -218,6 +218,18 @@ export async function createPlayer(
     return { error: 'Gamer tag cannot be empty.' }
   }
 
+  // Duplicate check: exact same gamer tag (case-insensitive) prevents accidental double-submit
+  const { data: existing } = await supabase
+    .from('players')
+    .select('id, gamer_tag')
+    .ilike('gamer_tag', trimmed)
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) {
+    return { error: `A player with tag "${existing.gamer_tag}" already exists.` }
+  }
+
   const { data, error } = await supabase
     .from('players')
     .insert({ gamer_tag: trimmed })
