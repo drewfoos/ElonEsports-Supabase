@@ -1,6 +1,13 @@
 import { notFound } from 'next/navigation'
+import { unstable_cache } from 'next/cache'
 import { getPlayerProfile } from '@/lib/actions/player-profile'
 import { ProfileClient } from './profile-client'
+
+const getCachedProfile = unstable_cache(
+  async (playerId: string) => getPlayerProfile(playerId),
+  ['player-profile'],
+  { revalidate: 60 }
+)
 
 export default async function PlayerProfilePage({
   params,
@@ -9,7 +16,7 @@ export default async function PlayerProfilePage({
 }) {
   const { playerId } = await params
 
-  const result = await getPlayerProfile(playerId)
+  const result = await getCachedProfile(playerId)
 
   if ('error' in result) {
     notFound()

@@ -1,6 +1,4 @@
-'use server'
-
-import { createClient } from '@/lib/supabase/server'
+import { createStaticClient } from '@/lib/supabase/static'
 
 export interface PlayerProfile {
   player: {
@@ -45,7 +43,7 @@ export interface PlayerProfile {
 export async function getPlayerProfile(
   playerId: string
 ): Promise<PlayerProfile | { error: string }> {
-  const supabase = await createClient()
+  const supabase = createStaticClient()
 
   // 1. Fetch player + verify they're Elon in at least one semester
   const [playerRes, elonStatusRes] = await Promise.all([

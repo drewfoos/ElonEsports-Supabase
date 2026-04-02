@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js'
+import { updateTag } from 'next/cache'
 
 // ---------------------------------------------------------------------------
 // Pure helper functions
@@ -92,6 +93,10 @@ export async function recalculateSemester(
 
   try {
     await _recalculateSemesterInner(semesterId, adminClient)
+    // Bust public page caches after scores change
+    updateTag('leaderboard-data')
+    updateTag('players-list')
+    updateTag('player-profile')
   } finally {
     const { error: unlockErr } = await adminClient.rpc('release_semester_lock', { p_semester_id: semesterId })
     if (unlockErr) console.error(`Failed to release semester lock for ${semesterId}:`, unlockErr.message)

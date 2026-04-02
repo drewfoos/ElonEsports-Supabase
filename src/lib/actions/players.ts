@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, updateTag } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/actions/auth'
@@ -241,6 +241,7 @@ export async function createPlayer(
   }
 
   revalidatePath('/admin/players')
+  updateTag('players-list')
   return data as Player
 }
 
@@ -268,6 +269,8 @@ export async function updatePlayer(
   }
 
   revalidatePath('/admin/players')
+  updateTag('players-list')
+  updateTag('player-profile')
   return data as Player
 }
 
@@ -297,6 +300,8 @@ export async function updatePlayerElonStatus(
   await recalculateSemester(semesterId, supabase)
 
   revalidatePath('/admin/players')
+  updateTag('players-list')
+  updateTag('player-profile')
   return { success: true }
 }
 
@@ -344,6 +349,8 @@ export async function updatePlayerStartggIds(
   }
 
   revalidatePath('/admin/players')
+  updateTag('players-list')
+  updateTag('player-profile')
   return { success: true }
 }
 
@@ -510,5 +517,7 @@ export async function mergePlayers(
   )
 
   revalidatePath('/admin/players')
+  updateTag('players-list')
+  updateTag('player-profile')
   return { success: true }
 }

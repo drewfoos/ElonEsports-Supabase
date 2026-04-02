@@ -1,66 +1,75 @@
 import { createClient } from '@/lib/supabase/server'
+import { createStaticClient } from '@/lib/supabase/static'
+import { unstable_cache } from 'next/cache'
 import type { Semester, LeaderboardEntry } from '@/lib/types'
 import { LeaderboardClient } from './leaderboard-client'
 
-export default async function LeaderboardPage() {
-  const supabase = await createClient()
+const getLeaderboardData = unstable_cache(
+  async () => {
+    const supabase = createStaticClient()
+    const today = new Date().toISOString().split('T')[0]
 
-  // Parallel: semesters + auth check
-  const [semestersResult, sessionResult] = await Promise.all([
-    supabase
+    const { data: semesterRows } = await supabase
       .from('semesters')
       .select('*')
-      .order('start_date', { ascending: false }),
-    supabase.auth.getUser(),
-  ])
+      .order('start_date', { ascending: false })
 
-  const semesters = (semestersResult.data ?? []) as Semester[]
-  const isLoggedIn = !!sessionResult.data?.user
+    const semesters = (semesterRows ?? []) as Semester[]
+    const currentSemester = semesters.find(
+      (s) => s.start_date <= today && s.end_date >= today
+    )
+    const initialSemesterId = currentSemester?.id ?? semesters[0]?.id ?? ''
 
-  // Find current semester
-  const today = new Date().toISOString().split('T')[0]
-  const currentSemester = semesters.find(
-    (s) => s.start_date <= today && s.end_date >= today
-  )
-  const initialSemesterId = currentSemester?.id ?? semesters[0]?.id ?? ''
+    let initialEntries: LeaderboardEntry[] = []
+    if (initialSemesterId) {
+      const { data } = await supabase
+        .from('player_semester_scores')
+        .select(
+          'player_id, total_score, tournament_count, average_score, players(gamer_tag)'
+        )
+        .eq('semester_id', initialSemesterId)
+        .gte('tournament_count', 3)
+        .order('average_score', { ascending: true })
 
-  // Fetch initial leaderboard (min_tournaments = 3 default)
-  let initialEntries: LeaderboardEntry[] = []
-  if (initialSemesterId) {
-    const { data } = await supabase
-      .from('player_semester_scores')
-      .select(
-        'player_id, total_score, tournament_count, average_score, players(gamer_tag)'
-      )
-      .eq('semester_id', initialSemesterId)
-      .gte('tournament_count', 3)
-      .order('average_score', { ascending: true })
-
-    const rows = data ?? []
-    let currentRank = 1
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]
-      const playerData = row.players as unknown as { gamer_tag: string } | null
-      if (i > 0 && row.average_score !== rows[i - 1].average_score) {
-        currentRank = i + 1
+      const rows = data ?? []
+      let currentRank = 1
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        const playerData = row.players as unknown as { gamer_tag: string } | null
+        if (i > 0 && row.average_score !== rows[i - 1].average_score) {
+          currentRank = i + 1
+        }
+        initialEntries.push({
+          rank: currentRank,
+          player_id: row.player_id,
+          gamer_tag: playerData?.gamer_tag ?? 'Unknown',
+          average_score: row.average_score,
+          total_score: row.total_score,
+          tournament_count: row.tournament_count,
+        })
       }
-      initialEntries.push({
-        rank: currentRank,
-        player_id: row.player_id,
-        gamer_tag: playerData?.gamer_tag ?? 'Unknown',
-        average_score: row.average_score,
-        total_score: row.total_score,
-        tournament_count: row.tournament_count,
-      })
     }
-  }
+
+    return { semesters, initialSemesterId, initialEntries }
+  },
+  ['leaderboard-data'],
+  { revalidate: 60 }
+)
+
+export default async function LeaderboardPage() {
+  // Auth check must stay dynamic (uses cookies), run in parallel with cached data
+  const [{ semesters, initialSemesterId, initialEntries }, sessionResult] =
+    await Promise.all([
+      getLeaderboardData(),
+      createClient().then((c) => c.auth.getUser()),
+    ])
 
   return (
     <LeaderboardClient
       semesters={semesters}
       initialSemesterId={initialSemesterId}
       initialEntries={initialEntries}
-      isLoggedIn={isLoggedIn}
+      isLoggedIn={!!sessionResult.data?.user}
     />
   )
 }
