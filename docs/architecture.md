@@ -89,12 +89,17 @@ Admin → POST importFromStartgg(url)
      → Query EventStandings paginated (perPage 100)
        → For each standing: extract placement, Player.id, gamerTag
        → Filter out invalid placements before returning
-     → Return preview to admin
+     → Fetch Elon status for target semester
+       → If no status rows exist (first import of new semester):
+         carry forward Elon flags from most recent previous semester
+     → Return preview to admin (Elon checkboxes pre-filled)
 
 Admin → POST confirmTournamentImport(data)
      → Parallel: findOrCreateSemester + check duplicates
      → Match players: startgg_player_id array match first, then gamerTag, else create new
-     → Admin flags which are Elon students
+     → Upsert Elon status for ALL existing players:
+       → Checked players → is_elon_student: true
+       → Unchecked existing players → is_elon_student: false
      → Insert tournament + tournament_results
      → Respond to client immediately
      → after(): insert sets + recalculateSemester (deferred, non-blocking)
@@ -197,7 +202,7 @@ Admin → POST mergePlayers(keepId, mergeId)
 
 - **Players directory** — queries filtered by Elon player IDs (fetches IDs first, then filters `tournament_results` and `sets` by those IDs instead of scanning entire tables); cached with `players-list` tag and 60s TTL
 - **Player profile** — 3 parallel DB batches (down from 4 sequential); `totalSets`, `totalWins`, `winPct` and reversed arrays computed server-side (no client recomputation); cached with `player-profile` tag
-- **SVG trend chart** — monotone cubic spline interpolation, gradient area fill, glow filter; no charting library dependency
+- **SVG visualizations** — Performance Signal (waveform bars), Placement Timeline (cubic spline line chart), Player Journey (milestone timeline); all pure SVG, no charting library
 - **Head-to-head** — expandable table (first 10 shown, rest on demand); win-rate bars rendered inline
 
 ## Idempotency
@@ -278,8 +283,11 @@ src/
 │   │   ├── page.tsx               # Players directory (Server Component, all semesters)
 │   │   ├── players-list-client.tsx # Interactive players list (search, table, cards)
 │   │   └── [playerId]/
-│   │       ├── page.tsx           # Player profile (Server Component)
-│   │       └── profile-client.tsx # Profile UI (trend chart, h2h, tournament history)
+│   │       ├── page.tsx               # Player profile (Server Component)
+│   │       ├── profile-client.tsx     # Profile UI (h2h, tournament history, stat cards)
+│   │       ├── performance-signal.tsx # Waveform bar chart (percentile per tournament)
+│   │       ├── placement-timeline.tsx # Line chart (percentile progression over time)
+│   │       └── player-journey.tsx     # Spotify Wrapped-style career milestones
 │   ├── login/
 │   │   └── page.tsx               # Admin login (email/password)
 │   ├── admin/

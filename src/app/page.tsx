@@ -20,7 +20,7 @@ const getLeaderboardData = unstable_cache(
     )
     const initialSemesterId = currentSemester?.id ?? semesters[0]?.id ?? ''
 
-    let initialEntries: LeaderboardEntry[] = []
+    const initialEntries: LeaderboardEntry[] = []
     if (initialSemesterId) {
       const { data } = await supabase
         .from('player_semester_scores')

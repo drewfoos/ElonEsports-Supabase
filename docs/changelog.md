@@ -4,6 +4,39 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v0.9.0 — Player Profile Visualizations & Import Fixes
+
+### Player Profile Visualizations
+- **Performance Signal** — waveform bar chart showing placement percentile per tournament, grouped by semester with color-coded tiers (gold 1st, orange podium, emerald top 25%, cyan top 50%, blue top 75%, red bottom)
+- **Placement Timeline** — SVG line chart with smooth cubic spline showing percentile progression over time, field-size context bars along the bottom strip
+- **Player Journey** — Spotify Wrapped-style vertical timeline of career milestones (first tournament, total events, set record, biggest rival, peak performance, podium streak, current standing)
+- **Player Scatter** — scatter plot on players directory showing all Elon players by tournament count vs win rate
+- Removed Avg Score stat card (not normalized across semesters)
+- Removed Score Trend chart (replaced by Performance Signal + Placement Timeline)
+- Profile header redesigned: atmospheric gradient background, HUD corner brackets, larger avatar with animated glow for top-3 ranks, stat cards with accent glow lines
+- Player Journey contrast improvements: bumped label, detail, sub, and unit text opacity for readability
+- Tournament history: names link to start.gg tournament page when `startgg_slug` is available
+
+### Import Bug Fixes
+- **Elon status carry-forward** — when importing the first tournament of a new semester, Elon flags are now carried forward from the most recent previous semester (was showing all players as non-Elon, causing 0 scores)
+- **Elon status toggle on import** — unchecking a previously-Elon player during import now upserts `is_elon_student: false` (was silently preserving the old `true` status)
+
+### Other Fixes
+- Fixed SVG `<title>` hydration mismatch in PlacementTimeline (array children → template string)
+- Added `startgg_slug` to player profile tournament results query
+- Added `scripts/` to tsconfig exclude (test files had duplicate declarations)
+
+### New Files
+- `src/app/players/[playerId]/performance-signal.tsx` — Waveform bar chart
+- `src/app/players/[playerId]/placement-timeline.tsx` — Percentile progression chart
+- `src/app/players/[playerId]/player-journey.tsx` — Career milestone timeline
+- `src/app/players/player-scatter.tsx` — Directory scatter plot
+
+### Dead Code
+- `src/app/players/[playerId]/matchup-chart.tsx` — radial matchup chart (created but replaced by PlayerJourney, not imported anywhere)
+
+---
+
 ## v0.8.0 — Admin Onboarding Guide
 
 ### Admin Dashboard

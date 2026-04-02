@@ -430,18 +430,28 @@ export async function confirmTournamentImport(
     }
   }
 
-  // Upsert Elon student status for flagged players
+  // Upsert Elon student status for all existing players in the import.
+  // Players checked as Elon get true; unchecked existing players get false
+  // so that carry-forward flags or previous status can be corrected.
   const elonUpserts: { player_id: string; semester_id: string; is_elon_student: boolean }[] = []
 
   for (const standing of preview.standings) {
     const playerId = playerIdMap.get(standing.key)
     if (!playerId) continue
 
+    // Only upsert for existing players (new players have no prior status to correct)
+    // and for anyone explicitly flagged as Elon
     if (elonFlags[standing.key]) {
       elonUpserts.push({
         player_id: playerId,
         semester_id: semester.id,
         is_elon_student: true,
+      })
+    } else if (standing.existingPlayerId) {
+      elonUpserts.push({
+        player_id: playerId,
+        semester_id: semester.id,
+        is_elon_student: false,
       })
     }
   }
@@ -602,7 +612,7 @@ async function buildImportPreview(
     admin.from('players').select('id, gamer_tag, startgg_player_ids'),
     admin
       .from('semesters')
-      .select('id')
+      .select('id, start_date')
       .lte('start_date', tournamentDate)
       .gte('end_date', tournamentDate)
       .limit(1)
@@ -610,7 +620,7 @@ async function buildImportPreview(
   ])
 
   const players = (playersResult.data ?? []) as Player[]
-  const semester = semesterResult.data as { id: string } | null
+  const semester = semesterResult.data as { id: string; start_date: string } | null
 
   // Build lookup maps for O(1) matching instead of O(n) scans per standing
   const playerByStartggId = new Map<string, Player>()
@@ -625,7 +635,10 @@ async function buildImportPreview(
     }
   }
 
-  // Fetch Elon status for the relevant semester
+  // Fetch Elon status for the relevant semester.
+  // If no statuses exist for this semester yet (first import of a new semester),
+  // carry forward from the most recent previous semester so the admin doesn't
+  // have to re-check every player manually.
   const elonStatusMap = new Map<string, boolean>()
 
   if (semester) {
@@ -634,9 +647,32 @@ async function buildImportPreview(
       .select('player_id, is_elon_student')
       .eq('semester_id', semester.id)
 
-    if (statusRows) {
+    if (statusRows && statusRows.length > 0) {
       for (const row of statusRows as PlayerSemesterStatus[]) {
         elonStatusMap.set(row.player_id, row.is_elon_student)
+      }
+    } else {
+      // No status rows for this semester — fall back to the most recent semester
+      const { data: prevSemester } = await admin
+        .from('semesters')
+        .select('id')
+        .lt('start_date', semester.start_date)
+        .order('start_date', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (prevSemester) {
+        const { data: prevRows } = await admin
+          .from('player_semester_status')
+          .select('player_id, is_elon_student')
+          .eq('semester_id', prevSemester.id)
+          .eq('is_elon_student', true)
+
+        if (prevRows) {
+          for (const row of prevRows as PlayerSemesterStatus[]) {
+            elonStatusMap.set(row.player_id, true)
+          }
+        }
       }
     }
   }

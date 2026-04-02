@@ -2,8 +2,6 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -17,7 +15,6 @@ import { HeroGeometric } from '@/components/ui/shape-landing-hero'
 import {
   Search,
   ArrowLeft,
-  Users,
   Swords,
   Trophy,
   Medal,
@@ -26,6 +23,7 @@ import {
   UserSearch,
 } from 'lucide-react'
 import { LastUpdated } from '@/components/last-updated'
+import { PlayerScatter } from './player-scatter'
 import type { PlayerListItem } from './page'
 
 export function PlayersListClient({ players, fetchedAt }: { players: PlayerListItem[]; fetchedAt: number }) {
@@ -133,6 +131,11 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
           </div>
         ) : (
           <>
+            {/* Scatter plot */}
+            <div className="mb-6">
+              <PlayerScatter players={filtered} />
+            </div>
+
             {/* Mobile card view */}
             <div className="block sm:hidden">
               <div className="grid grid-cols-1 gap-2.5">

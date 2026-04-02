@@ -26,6 +26,7 @@ export interface PlayerProfile {
     total_participants: number
     elon_participants: number
     weight: number
+    startgg_slug: string | null
   }[]
   /** Head-to-head records against other players */
   headToHead: {
@@ -79,7 +80,7 @@ export async function getPlayerProfile(
       .order('semester_id'),
     supabase
       .from('tournament_results')
-      .select('tournament_id, placement, score, tournaments(name, date, semester_id, total_participants, elon_participants, weight, semesters(name))')
+      .select('tournament_id, placement, score, tournaments(name, date, semester_id, total_participants, elon_participants, weight, startgg_slug, semesters(name))')
       .eq('player_id', playerId),
     supabase
       .from('sets')
@@ -179,6 +180,7 @@ export async function getPlayerProfile(
         total_participants: number
         elon_participants: number
         weight: number
+        startgg_slug: string | null
         semesters: { name: string }
       }
       return {
@@ -191,6 +193,7 @@ export async function getPlayerProfile(
         total_participants: t?.total_participants ?? 0,
         elon_participants: t?.elon_participants ?? 0,
         weight: Number(t?.weight ?? 0),
+        startgg_slug: t?.startgg_slug ?? null,
       }
     })
     .sort((a, b) => a.tournament_date.localeCompare(b.tournament_date))
