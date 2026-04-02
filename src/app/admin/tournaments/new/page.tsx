@@ -941,7 +941,7 @@ function StartggImportTab() {
             {events.length} Smash Ultimate event{events.length !== 1 ? 's' : ''} found. Select one to import:
           </p>
           <Label htmlFor="event-select">Event</Label>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Select
               value={selectedEventId}
               onValueChange={(val) => { if (val) setSelectedEventId(val) }}
@@ -965,7 +965,7 @@ function StartggImportTab() {
                 })}
               </SelectContent>
             </Select>
-            <Button size="lg" className="shrink-0" onClick={handleLoadPreview} disabled={loading || !selectedEventId}>
+            <Button size="lg" className="shrink-0 sm:w-auto w-full" onClick={handleLoadPreview} disabled={loading || !selectedEventId}>
               {loading ? 'Loading...' : 'Load Standings'}
             </Button>
           </div>
