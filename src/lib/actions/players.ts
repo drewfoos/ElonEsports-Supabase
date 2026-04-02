@@ -459,88 +459,94 @@ export async function mergePlayers(
     ])
   )
 
-  // 3. Process each mergeId result
+  // 3. Process mergeId results — batch by operation type to minimize round trips
+  const toReassign: string[] = []                                  // mergeResult IDs → change player_id to keepId
+  const toDelete: string[] = []                                    // mergeResult IDs to remove (conflict)
+  const toUpdatePlacement: { id: string; placement: number }[] = [] // keepResult IDs that need better placement
+  const conflictTournamentIds: string[] = []                       // tournaments losing a participant
+
   for (const mergeResult of mergeResults) {
     const existing = keepResultsByTournament.get(mergeResult.tournament_id)
 
     if (existing) {
-      // Conflict: both players have a result in the same tournament
+      // Conflict: both players in same tournament — keep better placement
+      conflictTournamentIds.push(mergeResult.tournament_id)
+      toDelete.push(mergeResult.id)
       if (mergeResult.placement < existing.placement) {
-        // mergeId has better placement — update keepId's result, delete mergeId's
-        const { error: updateError } = await supabase
-          .from('tournament_results')
-          .update({ placement: mergeResult.placement })
-          .eq('id', existing.id)
-
-        if (updateError) {
-          return { error: updateError.message }
-        }
-      }
-      // Either way, delete the mergeId's result
-      const { error: deleteError } = await supabase
-        .from('tournament_results')
-        .delete()
-        .eq('id', mergeResult.id)
-
-      if (deleteError) {
-        return { error: deleteError.message }
+        toUpdatePlacement.push({ id: existing.id, placement: mergeResult.placement })
       }
     } else {
-      // No conflict: reassign the result to keepId
-      const { error: reassignError } = await supabase
-        .from('tournament_results')
-        .update({ player_id: keepId })
-        .eq('id', mergeResult.id)
-
-      if (reassignError) {
-        return { error: reassignError.message }
-      }
+      // No conflict: reassign to keepId
+      toReassign.push(mergeResult.id)
     }
   }
 
-  // 4. Merge player_semester_status: prefer is_elon_student = true
-  for (const status of mergeStatuses ?? []) {
-    // If merge-player is Elon, ensure keep-player is too
-    // If keep-player already has a row, only update if merge has is_elon=true
-    if (status.is_elon_student) {
-      const { error: upsertError } = await supabase
-        .from('player_semester_status')
-        .upsert(
-          {
-            player_id: keepId,
-            semester_id: status.semester_id,
-            is_elon_student: true,
-          },
-          { onConflict: 'player_id,semester_id' }
-        )
-
-      if (upsertError) {
-        return { error: upsertError.message }
-      }
-    } else {
-      // merge-player is NOT Elon — only create a row if keep-player doesn't have one
-      const { error: upsertError } = await supabase
-        .from('player_semester_status')
-        .upsert(
-          {
-            player_id: keepId,
-            semester_id: status.semester_id,
-            is_elon_student: status.is_elon_student,
-          },
-          { onConflict: 'player_id,semester_id', ignoreDuplicates: true }
-        )
-
-      if (upsertError) {
-        return { error: upsertError.message }
-      }
-    }
+  // Execute all result mutations in parallel
+  const resultOps: PromiseLike<unknown>[] = []
+  if (toReassign.length > 0) {
+    resultOps.push(
+      supabase.from('tournament_results').update({ player_id: keepId }).in('id', toReassign)
+    )
+  }
+  if (toDelete.length > 0) {
+    resultOps.push(
+      supabase.from('tournament_results').delete().in('id', toDelete)
+    )
+  }
+  for (const up of toUpdatePlacement) {
+    resultOps.push(
+      supabase.from('tournament_results').update({ placement: up.placement }).eq('id', up.id)
+    )
+  }
+  if (resultOps.length > 0) {
+    await Promise.all(resultOps)
   }
 
-  // 5. Merge startgg_player_ids (already fetched in step 1) + delete merged player
-  const combinedIds = [
+  // Decrement total_participants for tournaments where we removed a duplicate result
+  if (conflictTournamentIds.length > 0) {
+    const { data: conflictTournaments } = await supabase
+      .from('tournaments')
+      .select('id, total_participants')
+      .in('id', conflictTournamentIds)
+
+    const decrements = (conflictTournaments ?? [])
+      .filter(t => t.total_participants > 0)
+      .map(t =>
+        supabase
+          .from('tournaments')
+          .update({ total_participants: t.total_participants - 1 })
+          .eq('id', t.id)
+      )
+    if (decrements.length > 0) await Promise.all(decrements)
+  }
+
+  // 4. Merge player_semester_status: prefer is_elon_student = true (batched)
+  // Cases:
+  //   merge=Elon → always upsert with true (overrides keep's false or creates new)
+  //   merge=notElon, keep=has row → skip (keep's row is authoritative)
+  //   merge=notElon, keep=no row → create with false
+  const keepSemesterSet = new Set((keepStatusesRes.data ?? []).map(s => s.semester_id))
+  const statusUpserts = mergeStatuses
+    .filter(s => s.is_elon_student || !keepSemesterSet.has(s.semester_id))
+    .map(status => ({
+      player_id: keepId,
+      semester_id: status.semester_id,
+      is_elon_student: status.is_elon_student,
+    }))
+
+  if (statusUpserts.length > 0) {
+    const { error: upsertError } = await supabase
+      .from('player_semester_status')
+      .upsert(statusUpserts, { onConflict: 'player_id,semester_id' })
+
+    if (upsertError) return { error: upsertError.message }
+  }
+
+  // 5. Merge startgg_player_ids (deduplicated) + delete merged player
+  const combinedIds = [...new Set([
     ...(keepPlayerRes.data.startgg_player_ids ?? []),
     ...(mergePlayerRes.data.startgg_player_ids ?? []),
-  ]
+  ])]
 
   const { error: updateIdsError } = await supabase
     .from('players')
