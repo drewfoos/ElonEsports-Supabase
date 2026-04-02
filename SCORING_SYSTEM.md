@@ -128,8 +128,10 @@ The scoring engine (`src/lib/scoring.ts`) performs a full semester recalculation
 
 - A tournament is added or deleted
 - A player's Elon status is changed
+- A player is deleted (all affected semesters recalculated)
 - Players are merged
 - Semester dates change (tournaments may shift between semesters)
+- The admin manually clicks the Recalculate button (on dashboard or tournaments page)
 
 The recalculation:
 1. Fetches all Elon player IDs for the semester
@@ -138,6 +140,16 @@ The recalculation:
 4. Deletes all existing `player_semester_scores` for the semester
 5. Inserts new scores: total_score, tournament_count, average_score per Elon player
 6. Cleans up stale scores for players no longer marked Elon
+
+### What Happens When a Player Is Deleted
+
+Deleting a player triggers FK cascades in the database:
+- `tournament_results` → **CASCADE** — their results are removed from all tournaments
+- `player_semester_status` → **CASCADE** — their Elon status records are removed
+- `player_semester_scores` → **CASCADE** — their semester scores are removed
+- `sets` (winner/loser) → **SET NULL** — set records are preserved but player references become null
+
+After the cascade, the system atomically decrements `total_participants` on each affected tournament (via a Postgres RPC that uses `greatest(0, total_participants - 1)` to avoid negative counts). Then all affected semesters are recalculated in parallel. This means tournament weights change because the participant count changed, which ripples through all scores in those semesters.
 
 **Concurrency safety:** Each recalculation acquires a per-semester advisory lock (`pg_try_advisory_lock`). If another recalc is already in progress for the same semester, the call skips silently.
 
