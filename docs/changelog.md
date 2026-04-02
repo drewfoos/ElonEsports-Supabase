@@ -9,7 +9,9 @@ All notable changes to the Elon Esports Smash PR tracker.
 ### Admin Dashboard
 - "First time here?" collapsible card on the admin dashboard
 - FAQ-style accordion: Import a Tournament, Manage Players, View Tournaments, Public Rankings
-- Each step expands to show a description and link to the relevant page
+- Each step expands with structured intro, scannable bullet points (left-border accent), optional tips, and pill CTA links
+- Active step highlights with filled icon and primary border tint
+- Collapsed steps show preview intro text below the title
 - Collapsed by default, click anywhere on the header to expand
 
 ### New Files
