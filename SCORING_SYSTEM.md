@@ -1,6 +1,6 @@
 # Elon Esports Smash PR — Scoring System
 
-> Reference doc for how scoring works in the original system. For rebuilding.
+> How the weighted average placement scoring works.
 
 ---
 
@@ -10,14 +10,14 @@ Rankings **reset every semester**. Nothing carries over. Each semester is its ow
 
 - Its own set of tournaments
 - Its own Elon student roster (who counts as Elon is decided per-semester)
-- Its own `totalElonStudents` count
 - Its own weights, scores, and rankings
 
-Semesters are defined as:
-- **Fall:** Aug 22 – Jan 24
-- **Spring:** Feb 1 – May 24
+Semesters are auto-created based on academic calendar conventions:
+- **Spring:** Jan 15 – May 15
+- **Summer:** May 16 – Aug 15
+- **Fall:** Aug 16 – Dec 20
 
-Tournaments are auto-assigned to a semester by their date.
+If a tournament's date doesn't fall within an existing semester, the system auto-creates one using these conventions, trimming the date range if it would overlap a neighbor. Admins can also create and edit semesters manually (with overlap validation).
 
 ---
 
@@ -28,36 +28,44 @@ Tournaments are auto-assigned to a semester by their date.
 Every tournament has a mix of **Elon students and non-Elon participants**. Both exist in the system, but they serve different roles:
 
 - **Elon students** get ranked and scored
-- **Non-Elon participants** only matter for the `totalParticipants` count in the weight formula — they make the denominator bigger, which affects how much a tournament counts
+- **Non-Elon participants** only matter for the `totalParticipants` count in the weight formula — they make the denominator bigger, reducing tournament weight
 
 ### Elon Status Changes Between Semesters
 
-A player's Elon status is **per-semester**. The admin flags who is/isn't an Elon student each semester. This means:
+A player's Elon status is **per-semester**. The admin flags who is/isn't an Elon student each semester via an optimistic toggle UI. This means:
 
 - Someone is Elon in Fall 2024, graduates, and is NOT Elon in Spring 2025
 - A community member plays all year but is never flagged as Elon — they exist in the data but never get ranked
 - Someone transfers in mid-year — they're not Elon in Fall but are in Spring
-- Changing someone's Elon status triggers a **full recalculation** of the entire semester's scores (because it changes `totalElonStudents` which is in every weight formula)
+- Changing someone's Elon status triggers a **full recalculation** of that semester's scores (because it changes `elonParticipants` counts in affected tournaments)
 
-### The start.gg Tag Problem
+### start.gg Identity & Player Merge
 
-Players are identified by their **start.gg player ID** and **gamerTag**. The same real person can appear as multiple players if they:
+Players are identified by their **start.gg player ID** (stored as an array in `startgg_player_ids`) and **gamerTag**. The same real person can appear as multiple players if they use different start.gg accounts or enter under different tags.
 
-- Create a new start.gg account
-- Enter under a friend's account
-- Change their gamerTag between events
-
-There's no merge or alias system. The admin just has to notice and deal with it manually.
+The admin can **merge duplicate players**: select two players, combine them into one. The merge:
+1. Reassigns all tournament results (keeps better placement on conflicts)
+2. Merges Elon status (prefers `true` on conflicts)
+3. Combines start.gg ID arrays
+4. Deletes the merged player
+5. Recalculates all affected semesters
 
 ---
 
 ## Tournament Data Sources
 
-Tournaments come from **two sources**:
+### start.gg Import
 
-1. **start.gg imports** — Admin pastes a tournament URL/slug, the system queries start.gg's GraphQL API, auto-detects the "Ultimate Singles" event, and pulls participants with placements and start.gg player IDs.
+Admin pastes a tournament URL → system extracts the slug → queries start.gg GraphQL API → auto-detects the Smash Ultimate singles event (videogameId 1386) → pulls standings with placements and player IDs.
 
-2. **Manual entry** — Not every tournament is on start.gg. Casual weeklies, in-house events, or events on other platforms get entered by hand. The admin types in participant names and placements. These go through the exact same scoring pipeline, but with no start.gg player ID to anchor identity — so matching "Drew" in one manual tournament to "DrewF" in another is pure guesswork.
+- Player matching on import: match by `startgg_player_id` first, then `gamerTag`, else create new
+- Admin reviews the preview, flags Elon students with checkboxes, and confirms
+- Set/bracket data is imported in the background via deferred `after()` call (non-blocking)
+- Standings fetched at 100/page, sets at 40/page, with 400ms inter-page delay for rate limiting
+
+### Manual Entry
+
+Admin enters tournament name, date, and participants with placements. Supports single and double elimination bracket formats with auto-calculated placement slots. No start.gg ID — identity relies on gamerTag matching.
 
 Both types are treated identically by the scoring formula once confirmed.
 
@@ -67,18 +75,20 @@ Both types are treated identically by the scoring formula once confirmed.
 
 ### Step 1: Tournament Weight
 
-Every tournament in the semester gets a **weight** based on what fraction of the field was Elon students, normalized by how many Elon students exist that semester:
+Every tournament gets a **weight** based on what fraction of the field was Elon students:
 
 ```
-weight = (elonParticipants / totalParticipants)
+weight = elonParticipants / totalParticipants
 ```
 
 **What this means:**
-- A tournament that's mostly Elon students → higher weight (it's more "representative")
-- A big open bracket where Elon is a tiny fraction → lower weight
-- Dividing by `totalElonStudents` normalizes so that semesters with more Elon students don't inflate scores
+- A tournament that's mostly Elon students → higher weight (placements count more)
+- A big open bracket where Elon is a tiny fraction → lower weight (just showing up is rewarded)
 
-**Quirk:** Because `totalElonStudents` is in the denominator of every weight, adding a new Elon student to the semester (even one who hasn't played a single tournament) changes every single tournament's weight and therefore every player's scores. This is why the system does full recalculations.
+**Examples:**
+- Elon weekly (10/11 = 0.91): high weight → placements matter a lot
+- NC local (5/35 = 0.14): low weight → even mid-pack produces decent scores
+- Major regional (5/500 = 0.01): very low weight → placing 200th still yields a good score
 
 ### Step 2: Player Score Per Tournament
 
@@ -95,63 +105,59 @@ Where `placement` is finishing position (1st = 1, 2nd = 2, etc.). **Lower is bet
 Across all tournaments a player attended that semester:
 
 ```
-totalScore   = sum of all their tournament scores
+totalScore     = sum of all their tournament scores
 tournamentCount = number of tournaments they attended
-averageScore = totalScore / tournamentCount
+averageScore   = totalScore / tournamentCount
 ```
 
 ### Step 4: Rankings
 
-Players are ranked by `averageScore` **ascending**. Lowest average score = rank 1.
+Players are ranked by `averageScore` **ascending**. Lowest average = rank 1. Ties share the same rank (competition ranking).
 
 ### Display Filter
 
-The public display has a **minimum tournament count** filter (default 3, adjustable 1–5). Players who haven't attended enough tournaments are hidden from the leaderboard, but their underlying scores still exist in the database.
+The public leaderboard has a **minimum tournament count** filter (default 3, adjustable 1–5). Players below the threshold are hidden but their scores remain in the database.
 
 ---
 
 ## Recalculation
 
-Every time any of the following happens, **ALL scores for the entire semester are wiped and recalculated from scratch**:
+The scoring engine (`src/lib/scoring.ts`) performs a full semester recalculation when:
 
-- A tournament is added
-- A tournament is deleted
+- A tournament is added or deleted
 - A player's Elon status is changed
-- Tournament data is modified
+- Players are merged
+- Semester dates change (tournaments may shift between semesters)
 
-This happens because the weight formula depends on global counts (`totalElonStudents`, `elonParticipants`, `totalParticipants`) that can shift. Changing one thing cascades to everything.
+The recalculation:
+1. Fetches all Elon player IDs for the semester
+2. For each tournament: counts Elon participants, computes weight, updates tournament record
+3. For each tournament result: computes score (placement × weight), batches updates by score value
+4. Deletes all existing `player_semester_scores` for the semester
+5. Inserts new scores: total_score, tournament_count, average_score per Elon player
+6. Cleans up stale scores for players no longer marked Elon
+
+**Concurrency safety:** Each recalculation acquires a per-semester advisory lock (`pg_try_advisory_lock`). If another recalc is already in progress for the same semester, the call skips silently.
 
 ---
 
 ## Worked Example
 
-**Semester setup:** 10 Elon students total
+**Tournament A:** 35 entrants (NC local), 5 Elon → weight = 5/35 = 0.143
+**Tournament B:** 11 entrants (Elon weekly), 10 Elon → weight = 10/11 = 0.909
+**Tournament C:** 500 entrants (major), 5 Elon → weight = 5/500 = 0.01
 
-**Tournament A:** 32 entrants, 5 are Elon
+Player X places 5th in A, 2nd in B, 150th in C:
 ```
-weight = (5 / 32) / 10 = 0.015625
-```
-
-**Tournament B:** 16 entrants, 8 are Elon
-```
-weight = (8 / 16) / 10 = 0.05
-```
-
-**Player X** placed 1st in A, 3rd in B:
-```
-Score A      = 1 × 0.015625 = 0.015625
-Score B      = 3 × 0.05     = 0.15
-totalScore   = 0.165625
-tournaments  = 2
-averageScore = 0.0828
+Score A = 5 × 0.143  = 0.714
+Score B = 2 × 0.909  = 1.818
+Score C = 150 × 0.01 = 1.500
+average = (0.714 + 1.818 + 1.500) / 3 = 1.344
 ```
 
-**Now imagine an 11th Elon student is added** (hasn't played anything):
-```
-Tournament A weight = (5 / 32) / 11 = 0.01420
-Tournament B weight = (8 / 16) / 11 = 0.04545
-```
-Player X's scores all change even though nothing about their results changed. This is why full recalc is needed.
+This shows the formula working as intended:
+- 1st at a local (0.143) beats 1st at a weekly (0.909)
+- 200th at a major (200 × 0.01 = 2.0) is comparable to 2nd at a weekly (1.818)
 
 ---
 
@@ -162,21 +168,9 @@ Player X's scores all change even though nothing about their results changed. Th
 - **Per-semester** — scores, Elon rosters, and rankings all reset each semester
 - **Elon status is per-semester and manual** — admin flags it, can change between semesters
 - **Non-Elon players affect weights** — they inflate `totalParticipants`, reducing tournament weight
-- **Full recalc on any change** — because the weight formula has global dependencies
+- **Full recalc on any change** — because tournament weights depend on Elon participant counts
+- **Advisory locks** prevent concurrent recalculations from corrupting data
 - **No time/recency weighting** — all tournaments in a semester count equally
-- **No head-to-head** — only final placement matters
-- **No tournament quality adjustment** — 1st at a weak local and 1st at a stacked regional are treated the same (within what the weight formula captures)
-- **Player identity is fragile** — different start.gg accounts = different players, no merge system, worse for manual tournaments
-
----
-
-## Known Issues for the Rebuild
-
-1. **Full recalc every time** — expensive and unnecessary if we can track what changed
-2. **No player merging** — duplicate players from different start.gg accounts or manual entries can't be linked
-3. **Elon status is fully manual** — admin flags every player every semester
-4. **Weight formula quirk** — adding a non-participating Elon student changes everyone's scores
-5. **No head-to-head or strength-of-schedule** — only placement matters
-6. **No tournament quality tiers** — a local weekly and a major are treated the same
-7. **Hardcoded semester dates** — no flexibility for academic calendar changes
-8. **Manual tournaments have weaker identity** — no start.gg ID, just typed gamerTags
+- **Head-to-head data stored but not used for scoring** — set results from start.gg imports are stored in the `sets` table and displayed on player profile pages, but don't affect rankings
+- **No tournament quality tiers** — the weight formula is the only difficulty adjustment
+- **Player merge system** — admin can combine duplicate players across start.gg accounts

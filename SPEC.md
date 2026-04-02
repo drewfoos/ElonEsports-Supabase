@@ -2,19 +2,18 @@
 
 ## Product Overview
 
-A Super Smash Bros. Ultimate tournament tracker and public leaderboard for Elon University's esports club. One admin manages everything. Everyone else views the public leaderboard.
-
-**Goal:** Ship an MVP stable enough for club members to use. Not production-grade, but not embarrassing.
+A Super Smash Bros. Ultimate tournament tracker and public leaderboard for Elon University's esports club. One admin manages everything. Everyone else views the public leaderboard and player profiles.
 
 ---
 
 ## Auth
 
 - Single admin account — email stored in `ADMIN_EMAIL` env var
-- Supabase Auth (email/password or magic link)
-- Admin middleware: check Supabase session exists AND `session.user.email === ADMIN_EMAIL`
+- Supabase Auth (email/password)
+- Admin proxy (`src/proxy.ts`): check Supabase session exists AND `session.user.email === ADMIN_EMAIL` (case-insensitive)
+- `requireAdmin()` server action helper verifies auth on all mutations
 - No registration flow — admin account created manually in Supabase dashboard
-- Public users see leaderboard only, no login needed
+- Public users see leaderboard and player pages, no login needed
 
 ---
 
@@ -24,6 +23,8 @@ A Super Smash Bros. Ultimate tournament tracker and public leaderboard for Elon 
 
 This is a **weighted average placement** system. NOT ELO. **Lower score = better rank.**
 
+> Full scoring details: `SCORING_SYSTEM.md`
+
 ### Formula
 
 ```
@@ -32,7 +33,7 @@ player_score      = placement × tournament_weight
 average_score     = sum(all tournament scores) / tournament_count
 ```
 
-Rankings sorted by `average_score` **ascending** — lowest = Rank 1.
+Rankings sorted by `average_score` **ascending** — lowest = Rank 1. Ties share the same rank (competition ranking).
 
 ### Why This Formula Works
 
@@ -41,46 +42,31 @@ The Elon ratio (`elon/total`) captures competition difficulty:
 - **NC local** (5/35 = 0.14): low weight → even mid-pack placements produce good scores
 - **Major regional** (5/500 = 0.01): very low weight → just showing up is rewarded
 
-This means 1st at a local (score 0.14) is **much better** than 1st at a weekly (score 0.91). And placing 200th at a 500-person major (score 2.0) is comparable to 2nd at a weekly — which is fair given the competition level.
-
-All tournaments count toward the average — no cherry-picking. The weight formula already adjusts for difficulty, so bombing a local (20th × 0.14 = 2.86) is comparable to placing 3rd at a weekly (3 × 0.91 = 2.73).
-
 ### Key Mechanics
 
 - Rankings **reset every semester** — nothing carries over
 - Elon student status is **per-semester** — same person can be Elon one semester, not the next
 - Non-Elon participants exist in tournaments — they affect `total_participants` (weight denominator) but don't get ranked
-- **Tournament weights are stable** — only depend on that tournament's participant mix, not global state
-- Recalculation on: tournament CRUD, Elon status change, player merge/delete
-- Toggling Elon status recalculates affected tournaments only (not the entire semester's weights)
+- Recalculation on: tournament CRUD, Elon status change, player merge/delete, semester date change
+- **Advisory locks** prevent concurrent recalculations from corrupting data
+- **Batched score updates** — results with the same score value updated in a single query
 
 ### Display
 
 - Public leaderboard shows Elon students only
-- **Minimum tournament count filter** — default 3, admin can set 1–5
+- **Minimum tournament count filter** — default 3, adjustable 1–5
 - Players below threshold are hidden from display but scores exist in DB
 - Semester selector to view past semesters
-
-### Worked Example
-
-**Tournament A:** 35 entrants (NC local), 5 Elon → weight = 5/35 = 0.143
-**Tournament B:** 11 entrants (Elon weekly), 10 Elon → weight = 10/11 = 0.909
-**Tournament C:** 500 entrants (major), 5 Elon → weight = 5/500 = 0.01
-
-Player X places 5th in A, 2nd in B, 150th in C:
-```
-Score A = 5 × 0.143  = 0.714
-Score B = 2 × 0.909  = 1.818
-Score C = 150 × 0.01 = 1.500
-average = (0.714 + 1.818 + 1.500) / 3 = 1.344
-```
 
 ---
 
 ## Semesters
 
-- Auto-generated: **Fall** (Aug 22 – Jan 24) and **Spring** (Feb 1 – May 24)
-- Admin can **edit date ranges** for flexibility
+- **Auto-created** based on academic calendar: Spring (Jan 15 – May 15), Summer (May 16 – Aug 15), Fall (Aug 16 – Dec 20)
+- Auto-generated when a tournament's date doesn't fall within an existing semester
+- Auto-created ranges trimmed if they would overlap existing semesters
+- Admin can **create, edit date ranges, and rename** semesters
+- **Overlap validation** — date ranges cannot overlap (enforced server-side on create and update)
 - Tournaments auto-assign to a semester by their date
 - Each semester is isolated: own Elon roster, own tournaments, own scores
 
@@ -92,23 +78,32 @@ average = (0.714 + 1.818 + 1.500) / 3 = 1.344
 
 - Elon students get ranked and scored
 - Non-Elon participants only matter for `total_participants` in the weight formula
-- Elon status is per-semester — admin flags it manually each semester
+- Elon status is per-semester — admin flags it manually with an optimistic toggle UI
 
 ### start.gg Identity
 
 - Players identified by start.gg player ID + gamerTag
 - Same person can appear as multiple players (different accounts, different tags)
 - `startgg_player_ids` stored as array to support merged players
+- On import: match by `startgg_player_id` first, then `gamerTag`, else create new
 
 ### Player Merge
 
 Admin can merge Player B into Player A:
-1. Reassign all tournament results from B → A
-2. If both have a result in the same tournament, keep the better placement
-3. Merge start.gg IDs (append B's to A's array)
-4. Optionally update A's gamerTag
-5. Delete Player B
-6. Recalculate all affected semesters
+1. Reassign all tournament results from B → A (keep better placement on conflicts)
+2. Merge Elon status (prefer `true` on conflicts)
+3. Combine start.gg ID arrays
+4. Delete Player B
+5. Recalculate all affected semesters in parallel
+
+### Player Profiles
+
+Each Elon player has a public profile page showing:
+- Stat cards: current rank, best placement, average score, set record
+- Score trend chart (SVG with monotone cubic spline interpolation)
+- Head-to-head records against all opponents (from `sets` table)
+- Tournament history with placement badges and semester grouping
+- Semester rankings with rank and tournament count
 
 ---
 
@@ -116,24 +111,26 @@ Admin can merge Player B into Player A:
 
 ### start.gg Import
 
-> Full API reference with all GraphQL queries: `docs/startgg-api.md`
+> Full API reference: `docs/startgg-api.md`
 
 - Admin pastes tournament URL → system extracts slug from URL pattern
 - Query start.gg GraphQL API (`https://api.start.gg/gql/alpha`)
 - Auth: `Authorization: Bearer $STARTGG_API_TOKEN`
 - Rate limit: 80 req/60s, 1000 objects per query complexity cap
-- Filter events by videogameId `1386` (Smash Ultimate) to auto-detect the right event
+- Filter events by videogameId `1386` (Smash Ultimate) — auto-detects singles event
 - Entity chain: Standing → Entrant → Participant → Player
   - `Player.id` is the stable global identifier (stored as `startgg_player_id`)
-  - `Participant.gamerTag` is frozen at registration time; `Player.gamerTag` is current
-- Pull placements + Player.id + gamerTag via EventStandings query (paginated, perPage 64)
-- Also pull set/match data via EventSets query → store in `sets` table (no UI yet)
-- Player matching on import: match by startgg_player_id first, then gamerTag, else create new
-- Admin reviews import, flags Elon students, confirms
+  - `Participant.gamerTag` is frozen at registration; `Player.gamerTag` is current
+- Pull placements + Player.id + gamerTag via EventStandings (paginated, 100/page)
+- Pull set/match data via EventSets (40/page) — imported in background via `after()` call
+- Admin reviews preview with search/filter, flags Elon students, confirms
+- **Deferred processing** — sets insertion and score recalculation happen after response via `after()` from `next/server`
 
 ### Manual Entry
-- Admin types tournament name, date, participants + placements
-- No start.gg ID — identity relies on gamerTag matching
+- Admin enters tournament name, date, bracket format (single/double elimination)
+- Auto-calculated placement slots based on bracket format
+- Virtualized player picker with inline "Create player" option
+- Drag-and-drop reordering with tier dividers and placement badges
 - Same scoring pipeline as start.gg imports
 
 ---
@@ -142,13 +139,16 @@ Admin can merge Player B into Player A:
 
 | Route | Access | Purpose |
 |-------|--------|---------|
-| `/` | Public | Leaderboard — semester selector, rankings, min tournament filter |
+| `/` | Public | Leaderboard — animated podium, semester selector, rankings table, min tournament filter |
+| `/players` | Public | Player directory — search, stats bar, responsive card/table views |
+| `/players/[id]` | Public | Player profile — stat cards, trend chart, head-to-head, tournament history |
 | `/login` | Public | Admin login page |
-| `/admin` | Protected | Dashboard with links to management pages |
-| `/admin/players` | Protected | Player list, add/edit/merge, set Elon status per semester |
-| `/admin/tournaments` | Protected | Tournament list, add manual / import start.gg, delete |
+| `/admin` | Protected | Dashboard with stats, recent tournaments, quick actions |
+| `/admin/players` | Protected | Player list, add/edit/merge, Elon status toggle per semester |
+| `/admin/tournaments` | Protected | Tournament list by semester, delete with confirmation |
 | `/admin/tournaments/new` | Protected | Create tournament (manual entry or start.gg import) |
-| `/admin/semesters` | Protected | View/edit semester date ranges |
+| `/admin/semesters` | Protected | View/edit/create semester date ranges |
+| `/api/leaderboard` | Public | JSON API — semester_id, min_tournaments params |
 
 ---
 
@@ -156,51 +156,48 @@ Admin can merge Player B into Player A:
 
 ### Public
 - `GET /api/leaderboard?semester_id=X&min_tournaments=3` — ranked Elon students for semester
+- `getPlayerProfile(playerId)` — player stats, trend data, head-to-head, tournament history
 
 ### Admin (Server Actions)
-- `createTournament(data)` — manual entry + recalc
-- `importFromStartgg(slug)` — fetch from start.gg, return preview
-- `confirmTournamentImport(data)` — save imported tournament + recalc
+All admin actions call `requireAdmin()` first and use the service role client.
+
+- `createTournament(data)` — manual entry + auto-semester + recalc (idempotent: rejects duplicate name+date+semester)
+- `importFromStartgg(url)` — fetch from start.gg, return preview
+- `confirmTournamentImport(data)` — save imported tournament + deferred recalc (idempotent: rejects duplicate startgg_event_id)
 - `deleteTournament(id)` — delete + recalc
-- `updatePlayerElonStatus(playerId, semesterId, isElon)` — update + recalc
-- `mergePlayers(keepId, mergeId)` — merge + recalc
-- `createPlayer(gamerTag)` — add new player
-- `updateSemester(id, dates)` — edit semester dates + recalc if tournaments shift
+- `updatePlayerElonStatus(playerId, semesterId, isElon)` — upsert + recalc
+- `mergePlayers(keepId, mergeId)` — merge + parallel recalc of affected semesters
+- `createPlayer(gamerTag)` — add new player (idempotent: rejects duplicate tags)
+- `deletePlayer(id)` — delete + parallel participant decrements + recalc
+- `updateSemester(id, dates)` — edit dates + reassign tournaments + recalc affected semesters
+- `createSemester(name, startDate, endDate)` — create with overlap validation (idempotent: rejects duplicate names)
 
 ---
 
-## Milestones
+## Data Safety
 
-### Milestone 1 — Admin + Player Management
-1. Scaffold Next.js project (App Router, Tailwind, TypeScript)
-2. Install shadcn/ui, set up Supabase clients (browser + server)
-3. Create database tables + RLS policies
-4. Seed auto-generated semesters
-5. Admin auth (login page, middleware, ADMIN_EMAIL check)
-6. Admin layout with navigation
-7. Player management (list, add, edit gamerTag)
-8. Semester status management (flag Elon per semester)
-9. Player merge UI
+### Idempotency
 
-### Milestone 2 — Tournament Management
-1. Manual tournament creation form (name, date, participants + placements)
-2. Player picker/autocomplete for adding participants
-3. start.gg import flow (paste URL → preview → confirm)
-4. Tournament list page with delete
-5. Semester auto-assignment by tournament date
+All create operations detect duplicates:
 
-### Milestone 3 — Scoring Engine
-1. Implement `recalculateSemester()` in `/lib/scoring.ts`
-2. Wire recalc triggers to all admin actions
-3. Verify with test data against worked example
-4. Store computed scores in `player_semester_scores` table
+| Operation | Duplicate Key | Behavior |
+|-----------|--------------|----------|
+| `createTournament` | name + date + semester | Rejects with error |
+| `createPlayer` | gamer_tag (case-insensitive) | Rejects with error |
+| `createSemester` | name (case-insensitive) | Rejects with error |
+| `confirmTournamentImport` | startgg_event_id | Rejects with error |
 
-### Milestone 4 — Public Leaderboard
-1. Leaderboard page with semester selector
-2. Rankings table sorted by averageScore ascending
-3. Minimum tournament count filter (default 3, slider 1–5)
-4. Top 3 podium display
-5. Deploy to Vercel
+### Concurrency
+
+- Advisory locks (`pg_try_advisory_lock`) prevent concurrent semester recalculations
+- Atomic SQL decrements (`greatest(0, total_participants - N)`) avoid read-then-write races
+- Lock release always in `finally` block
+
+### Error Handling
+
+- `not-found.tsx` — 404 page with navigation
+- `error.tsx` — runtime error boundary with retry
+- `global-error.tsx` — catches errors outside root layout
 
 ---
 
@@ -216,13 +213,14 @@ STARTGG_API_TOKEN=
 
 ---
 
-## Verification Checklist
+## Stack
 
-- [ ] Create test semester with known data matching worked example
-- [ ] Add 10 Elon students, 2 tournaments with specific participant counts
-- [ ] Verify computed weights, scores, and averageScore match expected values
-- [ ] Add 11th Elon student → verify all scores change correctly
-- [ ] Test player merge → verify participations transfer and scores recalculate
-- [ ] Test Elon status toggle → verify full recalc fires
-- [ ] Test public leaderboard with min tournament filter
-- [ ] Test start.gg import with a real tournament URL
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16 (App Router, Server Actions, RSC) |
+| Database | Supabase (Postgres, Auth, RLS) |
+| Styling | Tailwind CSS + shadcn/ui (dark theme) |
+| Icons | Lucide React |
+| Animation | Framer Motion |
+| Virtualization | @tanstack/react-virtual |
+| Deployment | Vercel |
