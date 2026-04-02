@@ -521,17 +521,17 @@ export async function mergePlayers(
   }
 
   // 4. Merge player_semester_status: prefer is_elon_student = true (batched)
-  // Cases:
-  //   merge=Elon → always upsert with true (overrides keep's false or creates new)
-  //   merge=notElon, keep=has row → skip (keep's row is authoritative)
-  //   merge=notElon, keep=no row → create with false
-  const keepSemesterSet = new Set((keepStatusesRes.data ?? []).map(s => s.semester_id))
+  // Only upsert when merge player is Elon for a semester — this either:
+  //   - Promotes keep from false→true (or no row→true)
+  //   - Is a no-op if keep is already Elon for that semester
+  // When merge is NOT Elon, skip entirely — keep's existing row (or absence) is correct.
+  // Absence of a row = not Elon, so we never create explicit is_elon=false rows.
   const statusUpserts = mergeStatuses
-    .filter(s => s.is_elon_student || !keepSemesterSet.has(s.semester_id))
+    .filter(s => s.is_elon_student)
     .map(status => ({
       player_id: keepId,
       semester_id: status.semester_id,
-      is_elon_student: status.is_elon_student,
+      is_elon_student: true,
     }))
 
   if (statusUpserts.length > 0) {
