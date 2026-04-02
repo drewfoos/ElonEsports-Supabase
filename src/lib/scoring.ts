@@ -77,6 +77,31 @@ export async function recalculateSemester(
   adminClient: SupabaseClient,
 ): Promise<void> {
   // ------------------------------------------------------------------
+  // 0. Acquire advisory lock to prevent concurrent recalcs of same semester.
+  //    If lock unavailable, another recalc is in progress — skip silently.
+  //    Lock released in finally block.
+  // ------------------------------------------------------------------
+  const { data: lockAcquired } = await adminClient.rpc('acquire_semester_lock', {
+    p_semester_id: semesterId,
+  })
+
+  if (!lockAcquired) {
+    // Another recalculation is already in progress for this semester
+    return
+  }
+
+  try {
+    await _recalculateSemesterInner(semesterId, adminClient)
+  } finally {
+    await adminClient.rpc('release_semester_lock', { p_semester_id: semesterId })
+  }
+}
+
+async function _recalculateSemesterInner(
+  semesterId: string,
+  adminClient: SupabaseClient,
+): Promise<void> {
+  // ------------------------------------------------------------------
   // 1. Parallel fetch: Elon students + tournaments
   // ------------------------------------------------------------------
   const [statusResult, tournamentsResult] = await Promise.all([

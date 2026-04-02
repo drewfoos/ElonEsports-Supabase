@@ -107,6 +107,48 @@ create table sets (
 );
 
 -- ============================================================
+-- FUNCTIONS (concurrency safety)
+-- ============================================================
+
+-- Atomic participant count decrement (avoids read-then-write race)
+create or replace function decrement_participants(
+  p_tournament_id uuid,
+  p_amount int default 1
+)
+returns void
+language sql
+as $$
+  update tournaments
+  set total_participants = greatest(0, total_participants - p_amount)
+  where id = p_tournament_id;
+$$;
+
+-- Advisory lock for semester recalculation (prevents concurrent recalcs)
+create or replace function acquire_semester_lock(p_semester_id uuid)
+returns boolean
+language plpgsql
+as $$
+declare
+  lock_key bigint;
+begin
+  lock_key := ('x' || left(replace(p_semester_id::text, '-', ''), 16))::bit(64)::bigint;
+  return pg_try_advisory_lock(lock_key);
+end;
+$$;
+
+create or replace function release_semester_lock(p_semester_id uuid)
+returns void
+language plpgsql
+as $$
+declare
+  lock_key bigint;
+begin
+  lock_key := ('x' || left(replace(p_semester_id::text, '-', ''), 16))::bit(64)::bigint;
+  perform pg_advisory_unlock(lock_key);
+end;
+$$;
+
+-- ============================================================
 -- INDEXES
 -- ============================================================
 create index idx_player_semester_status_semester on player_semester_status(semester_id);
