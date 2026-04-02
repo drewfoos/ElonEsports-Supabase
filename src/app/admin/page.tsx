@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getCurrentSemester } from '@/lib/actions/semesters'
+import { getCurrentSemester, getSemesters } from '@/lib/actions/semesters'
 import { getTournaments } from '@/lib/actions/tournaments'
 import { createClient } from '@/lib/supabase/server'
 import {
@@ -25,13 +25,19 @@ export default async function AdminDashboardPage() {
   // Single parallel batch — count queries use head:true (no row data transferred)
   const [
     currentSemesterResult,
+    allSemestersResult,
     playerCountResult,
     totalTournamentCountResult,
   ] = await Promise.all([
     getCurrentSemester(),
+    getSemesters(),
     supabase.from('players').select('*', { count: 'exact', head: true }),
     supabase.from('tournaments').select('*', { count: 'exact', head: true }),
   ])
+
+  const allSemesters = allSemestersResult && !('error' in allSemestersResult)
+    ? allSemestersResult
+    : []
 
   const currentSemester =
     currentSemesterResult && !('error' in currentSemesterResult)
@@ -153,8 +159,8 @@ export default async function AdminDashboardPage() {
           >
             View Public Rankings
           </Link>
-          {currentSemester && (
-            <RecalculateButton semesterId={currentSemester.id} />
+          {allSemesters.length > 0 && (
+            <RecalculateButton semesters={allSemesters} />
           )}
         </div>
       </div>

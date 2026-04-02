@@ -110,13 +110,28 @@ export async function getPlayersWithStatus(
 export async function getAllPlayersPaginated(
   page: number,
   pageSize: number,
-  search?: string
-): Promise<{ players: (Player & { tournament_count: number })[]; total: number } | { error: string }> {
+  search?: string,
+  elonFilter?: 'all' | 'elon' | 'non-elon'
+): Promise<{
+  players: (Player & { tournament_count: number; elon_semesters: string[] })[]
+  total: number
+} | { error: string }> {
   const supabase = await createClient()
   const from = page * pageSize
   const to = from + pageSize - 1
 
-  // Build query with optional search
+  // If filtering by Elon status, we need to find qualifying player IDs first
+  let elonPlayerIds: string[] | null = null
+  if (elonFilter === 'elon' || elonFilter === 'non-elon') {
+    const { data: statusRows, error: statusErr } = await supabase
+      .from('player_semester_status')
+      .select('player_id')
+      .eq('is_elon_student', true)
+    if (statusErr) return { error: statusErr.message }
+    elonPlayerIds = [...new Set((statusRows ?? []).map(r => r.player_id))]
+  }
+
+  // Build query with optional search and Elon filter
   let countQuery = supabase
     .from('players')
     .select('*', { count: 'exact', head: true })
@@ -133,10 +148,42 @@ export async function getAllPlayersPaginated(
     dataQuery = dataQuery.ilike('gamer_tag', pattern)
   }
 
+  if (elonFilter === 'elon' && elonPlayerIds) {
+    if (elonPlayerIds.length === 0) return { players: [], total: 0 }
+    countQuery = countQuery.in('id', elonPlayerIds)
+    dataQuery = dataQuery.in('id', elonPlayerIds)
+  } else if (elonFilter === 'non-elon' && elonPlayerIds) {
+    // For non-elon: can't use "not in" easily with empty array
+    if (elonPlayerIds.length > 0) {
+      countQuery = countQuery.not('id', 'in', `(${elonPlayerIds.join(',')})`)
+      dataQuery = dataQuery.not('id', 'in', `(${elonPlayerIds.join(',')})`)
+    }
+  }
+
   const [countRes, dataRes] = await Promise.all([countQuery, dataQuery])
 
   if (countRes.error) return { error: countRes.error.message }
   if (dataRes.error) return { error: dataRes.error.message }
+
+  // Fetch Elon semester names for the returned players
+  const playerIds = (dataRes.data ?? []).map(r => r.id)
+  let elonSemesterMap = new Map<string, string[]>()
+
+  if (playerIds.length > 0) {
+    const { data: statusRows } = await supabase
+      .from('player_semester_status')
+      .select('player_id, semester:semesters!inner(name)')
+      .eq('is_elon_student', true)
+      .in('player_id', playerIds)
+
+    for (const row of statusRows ?? []) {
+      const semName = (row.semester as unknown as { name: string })?.name
+      if (!semName) continue
+      const arr = elonSemesterMap.get(row.player_id) ?? []
+      arr.push(semName)
+      elonSemesterMap.set(row.player_id, arr)
+    }
+  }
 
   const players = (dataRes.data ?? []).map((row) => {
     const countArr = row.tournament_results as unknown as { count: number }[]
@@ -146,6 +193,7 @@ export async function getAllPlayersPaginated(
       startgg_player_ids: row.startgg_player_ids,
       created_at: row.created_at,
       tournament_count: countArr?.[0]?.count ?? 0,
+      elon_semesters: elonSemesterMap.get(row.id) ?? [],
     }
   })
 

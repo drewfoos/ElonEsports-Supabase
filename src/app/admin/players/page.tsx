@@ -54,7 +54,8 @@ import { toast } from 'sonner'
 import type { Player, Semester } from '@/lib/types'
 
 type PlayerWithStatus = Player & { is_elon_student: boolean }
-type AllPlayer = Player & { tournament_count: number }
+type AllPlayer = Player & { tournament_count: number; elon_semesters: string[] }
+type ElonFilter = 'all' | 'elon' | 'non-elon'
 
 const PAGE_SIZE = 50
 
@@ -112,6 +113,17 @@ const AllPlayerRow = React.memo(function AllPlayerRow({
           )}
         </button>
       </TableCell>
+      <TableCell>
+        {player.elon_semesters.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {player.elon_semesters.map(name => (
+              <Badge key={name} variant="default" className="text-xs">{name}</Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">None</span>
+        )}
+      </TableCell>
       <TableCell className="text-muted-foreground">
         {player.tournament_count}
       </TableCell>
@@ -130,11 +142,13 @@ function AllPlayersTab({
   onDelete,
   onManageIds,
   refreshKey,
+  elonFilter,
 }: {
   onEdit: (p: Player) => void
   onDelete: (p: Player) => void
   onManageIds: (p: Player) => void
   refreshKey: number
+  elonFilter: ElonFilter
 }) {
   const [players, setPlayers] = useState<AllPlayer[]>([])
   const [total, setTotal] = useState(0)
@@ -158,11 +172,16 @@ function AllPlayersTab({
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [])
 
+  // Reset page when filter changes
+  useEffect(() => { setPage(0) }, [elonFilter])
+
   // Fetch page
   const fetchPage = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await getAllPlayersPaginated(page, PAGE_SIZE, debouncedSearch || undefined)
+      const result = await getAllPlayersPaginated(
+        page, PAGE_SIZE, debouncedSearch || undefined, elonFilter
+      )
       if (!('error' in result)) {
         setPlayers(result.players)
         setTotal(result.total)
@@ -170,7 +189,7 @@ function AllPlayersTab({
     } finally {
       setLoading(false)
     }
-  }, [page, debouncedSearch])
+  }, [page, debouncedSearch, elonFilter])
 
   useEffect(() => {
     fetchPage()
@@ -196,7 +215,7 @@ function AllPlayersTab({
         <div className="flex justify-center py-12 text-muted-foreground">Loading players...</div>
       ) : players.length === 0 ? (
         <div className="flex justify-center py-12 text-muted-foreground">
-          {debouncedSearch ? 'No players match your search' : 'No players yet'}
+          {debouncedSearch || elonFilter !== 'all' ? 'No players match your filters' : 'No players yet'}
         </div>
       ) : (
         <>
@@ -206,6 +225,7 @@ function AllPlayersTab({
                 <TableRow>
                   <TableHead>GamerTag</TableHead>
                   <TableHead>start.gg IDs</TableHead>
+                  <TableHead>Elon Semesters</TableHead>
                   <TableHead>Tournaments</TableHead>
                   <TableHead className="w-[120px]">Actions</TableHead>
                 </TableRow>
@@ -329,6 +349,7 @@ export default function PlayersPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [elonFilter, setElonFilter] = useState<ElonFilter>('all')
 
   // Dialog state
   const [addOpen, setAddOpen] = useState(false)
@@ -398,8 +419,13 @@ export default function PlayersPage() {
   }, [selectedSemesterId, loadPlayers, tab])
 
   const filtered = useMemo(() =>
-    players.filter(p => p.gamer_tag.toLowerCase().includes(search.toLowerCase())),
-    [players, search]
+    players.filter(p => {
+      if (!p.gamer_tag.toLowerCase().includes(search.toLowerCase())) return false
+      if (elonFilter === 'elon' && !p.is_elon_student) return false
+      if (elonFilter === 'non-elon' && p.is_elon_student) return false
+      return true
+    }),
+    [players, search, elonFilter]
   )
 
   // Stable callbacks for memoized rows
@@ -570,14 +596,29 @@ export default function PlayersPage() {
         </div>
       </div>
 
-      {/* Tab switcher */}
-      <div className="flex items-center gap-1 rounded-lg bg-muted p-1 w-fit">
-        <TabButton active={tab === 'semester'} onClick={() => setTab('semester')}>
-          By Semester
-        </TabButton>
-        <TabButton active={tab === 'all'} onClick={() => setTab('all')}>
-          All Players
-        </TabButton>
+      {/* Tab switcher + Elon filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-1 rounded-lg bg-muted p-1 w-fit">
+          <TabButton active={tab === 'semester'} onClick={() => setTab('semester')}>
+            By Semester
+          </TabButton>
+          <TabButton active={tab === 'all'} onClick={() => setTab('all')}>
+            All Players
+          </TabButton>
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-sm text-muted-foreground">Status</Label>
+          <Select value={elonFilter} onValueChange={(v) => setElonFilter(v as ElonFilter)}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" label="All Players">All Players</SelectItem>
+              <SelectItem value="elon" label="Elon Only">Elon Only</SelectItem>
+              <SelectItem value="non-elon" label="Non-Elon">Non-Elon</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Semester tab */}
@@ -653,6 +694,7 @@ export default function PlayersPage() {
           onDelete={handleOpenDelete}
           onManageIds={handleOpenIds}
           refreshKey={refreshKey}
+          elonFilter={elonFilter}
         />
       )}
 
