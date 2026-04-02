@@ -28,13 +28,14 @@ import {
   BarChart3,
   History,
 } from 'lucide-react'
+import { LastUpdated } from '@/components/last-updated'
 import type { PlayerProfile } from '@/lib/actions/player-profile'
 
 // ---------------------------------------------------------------------------
 // Main profile
 // ---------------------------------------------------------------------------
 
-export function ProfileClient({ profile }: { profile: PlayerProfile }) {
+export function ProfileClient({ profile, fetchedAt }: { profile: PlayerProfile; fetchedAt: number }) {
   const { player, semesterScores, tournamentResults, headToHead, bestPlacement, currentRank } = profile
   const totalSets = headToHead.reduce((sum, h) => sum + h.wins + h.losses, 0)
   const totalWins = headToHead.reduce((sum, h) => sum + h.wins, 0)
@@ -204,9 +205,12 @@ export function ProfileClient({ profile }: { profile: PlayerProfile }) {
       </main>
 
       <footer className="border-t border-border/40 py-6">
-        <p className="text-center text-xs text-muted-foreground">
-          Elon University Esports Club
-        </p>
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4">
+          <p className="text-xs text-muted-foreground">
+            Elon University Esports Club
+          </p>
+          <LastUpdated fetchedAt={fetchedAt} tag="player-profile" />
+        </div>
       </footer>
     </div>
   )

@@ -25,9 +25,10 @@ import {
   ChevronRight,
   UserSearch,
 } from 'lucide-react'
+import { LastUpdated } from '@/components/last-updated'
 import type { PlayerListItem } from './page'
 
-export function PlayersListClient({ players }: { players: PlayerListItem[] }) {
+export function PlayersListClient({ players, fetchedAt }: { players: PlayerListItem[]; fetchedAt: number }) {
   const [search, setSearch] = useState('')
 
   const filtered = useMemo(() => {
@@ -239,9 +240,12 @@ export function PlayersListClient({ players }: { players: PlayerListItem[] }) {
       </main>
 
       <footer className="border-t border-white/[0.06] py-6">
-        <p className="text-center text-xs text-white/20">
-          Elon University Esports Club
-        </p>
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4">
+          <p className="text-xs text-white/20">
+            Elon University Esports Club
+          </p>
+          <LastUpdated fetchedAt={fetchedAt} tag="players-list" />
+        </div>
       </footer>
     </div>
   )

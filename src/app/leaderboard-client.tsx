@@ -21,6 +21,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { HeroGeometric } from '@/components/ui/shape-landing-hero'
 import { Trophy, Medal } from 'lucide-react'
+import { LastUpdated } from '@/components/last-updated'
 import type { Semester, LeaderboardEntry } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
@@ -174,11 +175,13 @@ export function LeaderboardClient({
   initialSemesterId,
   initialEntries,
   isLoggedIn,
+  fetchedAt,
 }: {
   semesters: Semester[]
   initialSemesterId: string
   initialEntries: LeaderboardEntry[]
   isLoggedIn: boolean
+  fetchedAt: number
 }) {
   const [selectedSemesterId, setSelectedSemesterId] = useState(initialSemesterId)
   const [minTournaments, setMinTournaments] = useState(3)
@@ -431,9 +434,12 @@ export function LeaderboardClient({
 
       {/* Footer */}
       <footer className="border-t border-white/[0.06] py-6">
-        <p className="text-center text-xs text-white/20">
-          Elon University Esports Club
-        </p>
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4">
+          <p className="text-xs text-white/20">
+            Elon University Esports Club
+          </p>
+          <LastUpdated fetchedAt={fetchedAt} tag="leaderboard-data" />
+        </div>
       </footer>
     </div>
   )

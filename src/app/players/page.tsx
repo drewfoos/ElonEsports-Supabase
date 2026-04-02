@@ -83,13 +83,13 @@ const getPlayersData = unstable_cache(
     // Sort alphabetically by gamer tag
     players.sort((a, b) => a.gamer_tag.localeCompare(b.gamer_tag, undefined, { sensitivity: 'base' }))
 
-    return players
+    return { players, fetchedAt: Date.now() }
   },
   ['players-list'],
   { revalidate: 60 }
 )
 
 export default async function PlayersPage() {
-  const players = await getPlayersData()
-  return <PlayersListClient players={players} />
+  const { players, fetchedAt } = await getPlayersData()
+  return <PlayersListClient players={players} fetchedAt={fetchedAt} />
 }

@@ -50,7 +50,7 @@ const getLeaderboardData = unstable_cache(
       }
     }
 
-    return { semesters, initialSemesterId, initialEntries }
+    return { semesters, initialSemesterId, initialEntries, fetchedAt: Date.now() }
   },
   ['leaderboard-data'],
   { revalidate: 60 }
@@ -58,7 +58,7 @@ const getLeaderboardData = unstable_cache(
 
 export default async function LeaderboardPage() {
   // Auth check must stay dynamic (uses cookies), run in parallel with cached data
-  const [{ semesters, initialSemesterId, initialEntries }, sessionResult] =
+  const [{ semesters, initialSemesterId, initialEntries, fetchedAt }, sessionResult] =
     await Promise.all([
       getLeaderboardData(),
       createClient().then((c) => c.auth.getUser()),
@@ -70,6 +70,7 @@ export default async function LeaderboardPage() {
       initialSemesterId={initialSemesterId}
       initialEntries={initialEntries}
       isLoggedIn={!!sessionResult.data?.user}
+      fetchedAt={fetchedAt}
     />
   )
 }
