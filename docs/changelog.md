@@ -4,6 +4,19 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v0.8.0 — Admin Onboarding Guide
+
+### Admin Dashboard
+- "First time here?" collapsible card on the admin dashboard
+- FAQ-style accordion: Import a Tournament, Manage Players, View Tournaments, Public Rankings
+- Each step expands to show a description and link to the relevant page
+- Collapsed by default, click anywhere on the header to expand
+
+### New Files
+- `src/app/admin/getting-started.tsx` — Onboarding guide component
+
+---
+
 ## v0.7.0 — Performance Optimizations
 
 ### Rendering & Bundle
