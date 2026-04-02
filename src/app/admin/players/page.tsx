@@ -8,8 +8,6 @@ import {
   getAllPlayersPaginated,
   createPlayer,
   updatePlayer,
-  deletePlayer,
-  deletePlayers,
   updatePlayerElonStatus,
   updatePlayerStartggIds,
   mergePlayers,
@@ -86,29 +84,15 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 const AllPlayerRow = React.memo(function AllPlayerRow({
   player,
-  selected,
-  onSelect,
   onEdit,
-  onDelete,
   onManageIds,
 }: {
   player: AllPlayer
-  selected: boolean
-  onSelect: (id: string, checked: boolean) => void
   onEdit: (p: Player) => void
-  onDelete: (p: Player) => void
   onManageIds: (p: Player) => void
 }) {
   return (
-    <TableRow className={selected ? 'bg-muted/50' : undefined}>
-      <TableCell className="w-[40px]">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={e => onSelect(player.id, e.target.checked)}
-          className="h-4 w-4 rounded border-input accent-primary"
-        />
-      </TableCell>
+    <TableRow>
       <TableCell className="font-medium">{player.gamer_tag}</TableCell>
       <TableCell>
         <button
@@ -149,10 +133,7 @@ const AllPlayerRow = React.memo(function AllPlayerRow({
         {player.tournament_count}
       </TableCell>
       <TableCell>
-        <div className="flex gap-1">
-          <Button variant="ghost" size="sm" onClick={() => onEdit(player)}>Edit</Button>
-          <Button variant="destructive" size="sm" onClick={() => onDelete(player)}>Delete</Button>
-        </div>
+        <Button variant="ghost" size="sm" onClick={() => onEdit(player)}>Edit</Button>
       </TableCell>
     </TableRow>
   )
@@ -160,16 +141,12 @@ const AllPlayerRow = React.memo(function AllPlayerRow({
 
 function AllPlayersTab({
   onEdit,
-  onDelete,
   onManageIds,
-  onBatchDeleted,
   refreshKey,
   elonFilter,
 }: {
   onEdit: (p: Player) => void
-  onDelete: (p: Player) => void
   onManageIds: (p: Player) => void
-  onBatchDeleted: () => void
   refreshKey: number
   elonFilter: ElonFilter
 }) {
@@ -179,9 +156,6 @@ function AllPlayersTab({
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
-  const [batchDeleting, setBatchDeleting] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   // Debounce search input (300ms)
@@ -198,44 +172,8 @@ function AllPlayersTab({
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [])
 
-  // Reset page + selection when filter changes
-  useEffect(() => { setPage(0); setSelected(new Set()) }, [elonFilter])
-
-  // Clear selection on page change
-  useEffect(() => { setSelected(new Set()) }, [page])
-
-  const handleSelect = useCallback((id: string, checked: boolean) => {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (checked) next.add(id)
-      else next.delete(id)
-      return next
-    })
-  }, [])
-
-  const handleSelectAll = useCallback((checked: boolean) => {
-    setSelected(checked ? new Set(players.map(p => p.id)) : new Set())
-  }, [players])
-
-  const handleBatchDelete = useCallback(async () => {
-    if (selected.size === 0) return
-    setBatchDeleting(true)
-    try {
-      const result = await deletePlayers([...selected])
-      if ('error' in result) {
-        toast.error(result.error)
-      } else {
-        toast.success(`Deleted ${result.deleted} player${result.deleted !== 1 ? 's' : ''}`)
-        setSelected(new Set())
-        setBatchDeleteOpen(false)
-        onBatchDeleted()
-      }
-    } catch {
-      toast.error('Batch delete failed')
-    } finally {
-      setBatchDeleting(false)
-    }
-  }, [selected, onBatchDeleted])
+  // Reset page when filter changes
+  useEffect(() => { setPage(0) }, [elonFilter])
 
   // Fetch page
   const fetchPage = useCallback(async () => {
@@ -271,15 +209,6 @@ function AllPlayersTab({
         <span className="text-sm text-muted-foreground">
           {total} player{total !== 1 ? 's' : ''}
         </span>
-        {selected.size > 0 && (
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setBatchDeleteOpen(true)}
-          >
-            Delete {selected.size} selected
-          </Button>
-        )}
       </div>
 
       {loading ? (
@@ -294,20 +223,11 @@ function AllPlayersTab({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[40px]">
-                    <input
-                      type="checkbox"
-                      checked={players.length > 0 && selected.size === players.length}
-                      ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < players.length }}
-                      onChange={e => handleSelectAll(e.target.checked)}
-                      className="h-4 w-4 rounded border-input accent-primary"
-                    />
-                  </TableHead>
                   <TableHead>GamerTag</TableHead>
                   <TableHead>start.gg IDs</TableHead>
                   <TableHead>Elon Semesters</TableHead>
                   <TableHead>Tournaments</TableHead>
-                  <TableHead className="w-[120px]">Actions</TableHead>
+                  <TableHead className="w-[80px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -315,10 +235,7 @@ function AllPlayersTab({
                   <AllPlayerRow
                     key={p.id}
                     player={p}
-                    selected={selected.has(p.id)}
-                    onSelect={handleSelect}
                     onEdit={onEdit}
-                    onDelete={onDelete}
                     onManageIds={onManageIds}
                   />
                 ))}
@@ -355,26 +272,6 @@ function AllPlayersTab({
         </>
       )}
 
-      {/* Batch delete confirmation */}
-      <Dialog open={batchDeleteOpen} onOpenChange={setBatchDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete {selected.size} Player{selected.size !== 1 ? 's' : ''}</DialogTitle>
-            <DialogDescription>
-              This will permanently delete {selected.size} player{selected.size !== 1 ? 's' : ''} and
-              all their tournament results. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBatchDeleteOpen(false)} disabled={batchDeleting}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleBatchDelete} disabled={batchDeleting}>
-              {batchDeleting ? 'Deleting...' : `Delete ${selected.size} Player${selected.size !== 1 ? 's' : ''}`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
@@ -388,14 +285,12 @@ const SemesterPlayerRow = React.memo(function SemesterPlayerRow({
   toggling,
   onToggleElon,
   onEdit,
-  onDelete,
   onManageIds,
 }: {
   player: PlayerWithStatus
   toggling: boolean
   onToggleElon: (playerId: string, newValue: boolean) => void
   onEdit: (p: Player) => void
-  onDelete: (p: Player) => void
   onManageIds: (p: Player) => void
 }) {
   return (
@@ -431,10 +326,7 @@ const SemesterPlayerRow = React.memo(function SemesterPlayerRow({
         )}
       </TableCell>
       <TableCell>
-        <div className="flex gap-1">
-          <Button variant="ghost" size="sm" disabled={toggling} onClick={() => onEdit(player)}>Edit</Button>
-          <Button variant="destructive" size="sm" disabled={toggling} onClick={() => onDelete(player)}>Delete</Button>
-        </div>
+        <Button variant="ghost" size="sm" disabled={toggling} onClick={() => onEdit(player)}>Edit</Button>
       </TableCell>
     </TableRow>
   )
@@ -462,9 +354,6 @@ export default function PlayersPage() {
   const [editPlayer, setEditPlayer] = useState<Player | null>(null)
   const [editTag, setEditTag] = useState('')
   const [editLoading, setEditLoading] = useState(false)
-
-  const [deleteTarget, setDeleteTarget] = useState<Player | null>(null)
-  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const [togglingElon, setTogglingElon] = useState<Set<string>>(new Set())
 
@@ -538,10 +427,6 @@ export default function PlayersPage() {
     setEditTag(p.gamer_tag)
   }, [])
 
-  const handleOpenDelete = useCallback((p: Player) => {
-    setDeleteTarget(p)
-  }, [])
-
   const handleOpenIds = useCallback((player: Player) => {
     setIdsPlayer(player)
     setIdsValue([...player.startgg_player_ids])
@@ -611,23 +496,6 @@ export default function PlayersPage() {
       }
     } finally {
       setEditLoading(false)
-    }
-  }
-
-  async function handleDelete() {
-    if (!deleteTarget) return
-    setDeleteLoading(true)
-    try {
-      const result = await deletePlayer(deleteTarget.id)
-      if ('error' in result) {
-        toast.error(result.error)
-      } else {
-        toast.success(`Deleted "${deleteTarget.gamer_tag}"`)
-        setDeleteTarget(null)
-        triggerRefresh()
-      }
-    } finally {
-      setDeleteLoading(false)
     }
   }
 
@@ -801,7 +669,6 @@ export default function PlayersPage() {
                       toggling={togglingElon.has(p.id)}
                       onToggleElon={handleElonToggle}
                       onEdit={handleOpenEdit}
-                      onDelete={handleOpenDelete}
                       onManageIds={handleOpenIds}
                     />
                   ))}
@@ -816,9 +683,7 @@ export default function PlayersPage() {
       {tab === 'all' && (
         <AllPlayersTab
           onEdit={handleOpenEdit}
-          onDelete={handleOpenDelete}
           onManageIds={handleOpenIds}
-          onBatchDeleted={triggerRefresh}
           refreshKey={refreshKey}
           elonFilter={elonFilter}
         />
@@ -873,25 +738,6 @@ export default function PlayersPage() {
             <Button variant="outline" onClick={() => setEditPlayer(null)}>Cancel</Button>
             <Button onClick={handleEdit} disabled={editLoading || !editTag.trim()}>
               {editLoading ? 'Saving...' : 'Save'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Player</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete &ldquo;{deleteTarget?.gamer_tag}&rdquo;?
-              This removes all their tournament results and cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleteLoading}>
-              {deleteLoading ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

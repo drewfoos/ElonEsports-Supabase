@@ -271,107 +271,6 @@ export async function updatePlayer(
   return data as Player
 }
 
-export async function deletePlayer(
-  id: string
-): Promise<{ success: true } | { error: string }> {
-  await requireAdmin()
-  const supabase = createAdminClient()
-
-  // Collect affected semester IDs BEFORE deleting (FK cascade will remove results)
-  const affectedSemesterIds = new Set<string>()
-
-  const [statusesRes, resultsRes] = await Promise.all([
-    supabase.from('player_semester_status').select('semester_id').eq('player_id', id),
-    supabase.from('tournament_results').select('tournament_id').eq('player_id', id),
-  ])
-
-  if (statusesRes.error) return { error: statusesRes.error.message }
-  if (resultsRes.error) return { error: resultsRes.error.message }
-
-  for (const s of statusesRes.data ?? []) affectedSemesterIds.add(s.semester_id)
-
-  const affectedTournamentIds = resultsRes.data?.length
-    ? [...new Set(resultsRes.data.map(r => r.tournament_id))]
-    : []
-
-  if (affectedTournamentIds.length > 0) {
-    const { data: tournaments, error: tErr } = await supabase
-      .from('tournaments')
-      .select('id, semester_id')
-      .in('id', affectedTournamentIds)
-    if (tErr) return { error: tErr.message }
-    for (const t of tournaments ?? []) affectedSemesterIds.add(t.semester_id)
-  }
-
-  // FK cascade deletes tournament_results, player_semester_status, player_semester_scores.
-  // Sets get winner/loser_player_id set to null.
-  // We do NOT decrement total_participants — the tournament still had that many players.
-  const { error } = await supabase
-    .from('players')
-    .delete()
-    .eq('id', id)
-
-  if (error) {
-    return { error: error.message }
-  }
-
-  // Recalculate affected semesters (elon_participants will update from remaining results)
-  await Promise.all(
-    [...affectedSemesterIds].map(semId => recalculateSemester(semId, supabase))
-  )
-
-  revalidatePath('/admin/players')
-  return { success: true }
-}
-
-export async function deletePlayers(
-  ids: string[]
-): Promise<{ success: true; deleted: number } | { error: string }> {
-  await requireAdmin()
-  if (ids.length === 0) return { success: true, deleted: 0 }
-
-  const supabase = createAdminClient()
-
-  // Collect affected semester IDs before deleting
-  const [statusesRes, resultsRes] = await Promise.all([
-    supabase.from('player_semester_status').select('semester_id').in('player_id', ids),
-    supabase.from('tournament_results').select('tournament_id').in('player_id', ids),
-  ])
-
-  if (statusesRes.error) return { error: statusesRes.error.message }
-  if (resultsRes.error) return { error: resultsRes.error.message }
-
-  const affectedSemesterIds = new Set<string>()
-  for (const s of statusesRes.data ?? []) affectedSemesterIds.add(s.semester_id)
-
-  const affectedTournamentIds = [...new Set((resultsRes.data ?? []).map(r => r.tournament_id))]
-  if (affectedTournamentIds.length > 0) {
-    const { data: tournaments, error: tErr } = await supabase
-      .from('tournaments')
-      .select('id, semester_id')
-      .in('id', affectedTournamentIds)
-    if (tErr) return { error: tErr.message }
-    for (const t of tournaments ?? []) affectedSemesterIds.add(t.semester_id)
-  }
-
-  // FK cascade deletes results/statuses/scores. Sets get player refs set to null.
-  // We do NOT decrement total_participants — tournaments still had that many players.
-  const { error } = await supabase
-    .from('players')
-    .delete()
-    .in('id', ids)
-
-  if (error) return { error: error.message }
-
-  // Recalculate affected semesters (elon_participants will update from remaining results)
-  await Promise.all(
-    [...affectedSemesterIds].map(semId => recalculateSemester(semId, supabase))
-  )
-
-  revalidatePath('/admin/players')
-  return { success: true, deleted: ids.length }
-}
-
 export async function updatePlayerElonStatus(
   playerId: string,
   semesterId: string,
@@ -553,17 +452,10 @@ export async function mergePlayers(
     await Promise.all(resultOps)
   }
 
-  // Atomic decrement total_participants for tournaments where we removed a duplicate
-  if (conflictTournamentIds.length > 0) {
-    const rpcResults = await Promise.all(
-      conflictTournamentIds.map(tid =>
-        supabase.rpc('decrement_participants', { p_tournament_id: tid, p_amount: 1 })
-      )
-    )
-    for (const r of rpcResults) {
-      if (r.error) console.error('decrement_participants failed:', r.error.message)
-    }
-  }
+  // Note: we do NOT decrement total_participants on merge conflicts.
+  // The two players were the same person tracked twice — the tournament's actual
+  // participant count hasn't changed. The recalculation will correctly count
+  // elon_participants from the remaining results.
 
   // 4. Merge player_semester_status: prefer is_elon_student = true (batched)
   // Only upsert when merge player is Elon for a semester — this either:
