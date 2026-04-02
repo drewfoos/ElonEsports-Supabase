@@ -15,7 +15,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
  *
  * Lower weight = harder competition = better (lower) scores for good placements.
  */
-export function computeWeight(
+function computeWeight(
   elonParticipants: number,
   totalParticipants: number,
 ): number {
@@ -30,7 +30,7 @@ export function computeWeight(
  *
  * Lower is better. 1st at a local (1 × 0.14 = 0.14) beats 1st at a weekly (1 × 0.91).
  */
-export function computeScore(placement: number, weight: number): number {
+function computeScore(placement: number, weight: number): number {
   if (!Number.isFinite(placement) || !Number.isFinite(weight)) return 0
   return placement * weight
 }
