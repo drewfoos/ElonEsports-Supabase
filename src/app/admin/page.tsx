@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { RecalculateButton } from './recalculate-button'
+import { GettingStarted } from './getting-started'
 
 const linkPrimary =
   'inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-xs hover:bg-primary/90'
@@ -90,6 +91,8 @@ export default async function AdminDashboardPage() {
             : 'No active semester'}
         </p>
       </div>
+
+      <GettingStarted />
 
       {/* Stats cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
