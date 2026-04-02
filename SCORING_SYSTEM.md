@@ -149,7 +149,9 @@ Deleting a player triggers FK cascades in the database:
 - `player_semester_scores` → **CASCADE** — their semester scores are removed
 - `sets` (winner/loser) → **SET NULL** — set records are preserved but player references become null
 
-After the cascade, the system atomically decrements `total_participants` on each affected tournament (via a Postgres RPC that uses `greatest(0, total_participants - 1)` to avoid negative counts). Then all affected semesters are recalculated in parallel. This means tournament weights change because the participant count changed, which ripples through all scores in those semesters.
+The tournament's `total_participants` is **not decremented** — the tournament still had that many players regardless of whether we later delete one from the system. The recalculation updates `elon_participants` from the remaining results, so if the deleted player was Elon, the weight adjusts (fewer Elon participants / same total). This is correct: the tournament difficulty hasn't changed, only who we're tracking.
+
+> **Note:** Player deletion is primarily a testing/cleanup tool. In production, duplicates should be merged rather than deleted, and inactive players can simply be left alone — they won't appear on leaderboards if they have no tournament results.
 
 **Concurrency safety:** Each recalculation acquires a per-semester advisory lock (`pg_try_advisory_lock`). If another recalc is already in progress for the same semester, the call skips silently.
 

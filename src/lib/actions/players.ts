@@ -277,7 +277,7 @@ export async function deletePlayer(
   await requireAdmin()
   const supabase = createAdminClient()
 
-  // Parallel: collect affected data BEFORE deleting (FK cascade will remove results)
+  // Collect affected semester IDs BEFORE deleting (FK cascade will remove results)
   const affectedSemesterIds = new Set<string>()
 
   const [statusesRes, resultsRes] = await Promise.all([
@@ -303,6 +303,9 @@ export async function deletePlayer(
     for (const t of tournaments ?? []) affectedSemesterIds.add(t.semester_id)
   }
 
+  // FK cascade deletes tournament_results, player_semester_status, player_semester_scores.
+  // Sets get winner/loser_player_id set to null.
+  // We do NOT decrement total_participants — the tournament still had that many players.
   const { error } = await supabase
     .from('players')
     .delete()
@@ -312,20 +315,7 @@ export async function deletePlayer(
     return { error: error.message }
   }
 
-  // Atomic decrement total_participants (no read-then-write race)
-  // Best-effort — player is already deleted, so log but don't fail
-  if (affectedTournamentIds.length > 0) {
-    const rpcResults = await Promise.all(
-      affectedTournamentIds.map(tid =>
-        supabase.rpc('decrement_participants', { p_tournament_id: tid, p_amount: 1 })
-      )
-    )
-    for (const r of rpcResults) {
-      if (r.error) console.error('decrement_participants failed:', r.error.message)
-    }
-  }
-
-  // Parallel: recalculate all affected semesters
+  // Recalculate affected semesters (elon_participants will update from remaining results)
   await Promise.all(
     [...affectedSemesterIds].map(semId => recalculateSemester(semId, supabase))
   )
@@ -342,10 +332,10 @@ export async function deletePlayers(
 
   const supabase = createAdminClient()
 
-  // Collect all affected data in parallel before deleting
+  // Collect affected semester IDs before deleting
   const [statusesRes, resultsRes] = await Promise.all([
     supabase.from('player_semester_status').select('semester_id').in('player_id', ids),
-    supabase.from('tournament_results').select('tournament_id, player_id').in('player_id', ids),
+    supabase.from('tournament_results').select('tournament_id').in('player_id', ids),
   ])
 
   if (statusesRes.error) return { error: statusesRes.error.message }
@@ -354,13 +344,7 @@ export async function deletePlayers(
   const affectedSemesterIds = new Set<string>()
   for (const s of statusesRes.data ?? []) affectedSemesterIds.add(s.semester_id)
 
-  // Count how many of the selected players are in each tournament (for participant decrement)
-  const tournamentPlayerCounts = new Map<string, number>()
-  for (const r of resultsRes.data ?? []) {
-    tournamentPlayerCounts.set(r.tournament_id, (tournamentPlayerCounts.get(r.tournament_id) ?? 0) + 1)
-  }
-
-  const affectedTournamentIds = [...tournamentPlayerCounts.keys()]
+  const affectedTournamentIds = [...new Set((resultsRes.data ?? []).map(r => r.tournament_id))]
   if (affectedTournamentIds.length > 0) {
     const { data: tournaments, error: tErr } = await supabase
       .from('tournaments')
@@ -370,7 +354,8 @@ export async function deletePlayers(
     for (const t of tournaments ?? []) affectedSemesterIds.add(t.semester_id)
   }
 
-  // Delete all players in one query (FK cascade handles results + statuses)
+  // FK cascade deletes results/statuses/scores. Sets get player refs set to null.
+  // We do NOT decrement total_participants — tournaments still had that many players.
   const { error } = await supabase
     .from('players')
     .delete()
@@ -378,22 +363,7 @@ export async function deletePlayers(
 
   if (error) return { error: error.message }
 
-  // Atomic decrement total_participants per tournament (best-effort post-delete)
-  if (affectedTournamentIds.length > 0) {
-    const rpcResults = await Promise.all(
-      affectedTournamentIds.map(tid =>
-        supabase.rpc('decrement_participants', {
-          p_tournament_id: tid,
-          p_amount: tournamentPlayerCounts.get(tid) ?? 1,
-        })
-      )
-    )
-    for (const r of rpcResults) {
-      if (r.error) console.error('decrement_participants failed:', r.error.message)
-    }
-  }
-
-  // Recalculate all affected semesters
+  // Recalculate affected semesters (elon_participants will update from remaining results)
   await Promise.all(
     [...affectedSemesterIds].map(semId => recalculateSemester(semId, supabase))
   )
