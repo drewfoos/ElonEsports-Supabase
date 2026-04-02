@@ -202,15 +202,16 @@ export function ProfileClient({ profile, fetchedAt }: { profile: PlayerProfile; 
             <TournamentHistoryTable results={tournamentResults} />
           </Section>
         )}
+
+        <div className="mt-6 flex justify-center">
+          <LastUpdated fetchedAt={fetchedAt} tag="player-profile" />
+        </div>
       </main>
 
       <footer className="border-t border-border/40 py-6">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4">
-          <p className="text-xs text-muted-foreground">
-            Elon University Esports Club
-          </p>
-          <LastUpdated fetchedAt={fetchedAt} tag="player-profile" />
-        </div>
+        <p className="text-center text-xs text-muted-foreground">
+          Elon University Esports Club
+        </p>
       </footer>
     </div>
   )

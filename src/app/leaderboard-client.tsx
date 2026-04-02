@@ -345,6 +345,9 @@ export function LeaderboardClient({
             <p className="text-sm text-white/20">
               Try selecting a different semester or lowering the minimum tournament requirement.
             </p>
+            <div className="mt-4">
+              <LastUpdated fetchedAt={fetchedAt} tag="leaderboard-data" />
+            </div>
           </div>
         )}
 
@@ -377,6 +380,7 @@ export function LeaderboardClient({
 
         {/* Full rankings table */}
         {!loading && hasEntries && (
+          <>
           <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
             <Table>
               <TableHeader>
@@ -429,17 +433,19 @@ export function LeaderboardClient({
               </TableBody>
             </Table>
           </div>
+
+          <div className="mt-4 flex justify-center">
+            <LastUpdated fetchedAt={fetchedAt} tag="leaderboard-data" />
+          </div>
+          </>
         )}
       </main>
 
       {/* Footer */}
       <footer className="border-t border-white/[0.06] py-6">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4">
-          <p className="text-xs text-white/20">
-            Elon University Esports Club
-          </p>
-          <LastUpdated fetchedAt={fetchedAt} tag="leaderboard-data" />
-        </div>
+        <p className="text-center text-xs text-white/20">
+          Elon University Esports Club
+        </p>
       </footer>
     </div>
   )

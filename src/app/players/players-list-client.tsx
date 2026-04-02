@@ -127,6 +127,9 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
                 Clear search
               </button>
             )}
+            <div className="mt-4">
+              <LastUpdated fetchedAt={fetchedAt} tag="players-list" />
+            </div>
           </div>
         ) : (
           <>
@@ -235,17 +238,18 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
                 </Table>
               </div>
             </div>
+
+            <div className="mt-4 flex justify-center">
+              <LastUpdated fetchedAt={fetchedAt} tag="players-list" />
+            </div>
           </>
         )}
       </main>
 
       <footer className="border-t border-white/[0.06] py-6">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4">
-          <p className="text-xs text-white/20">
-            Elon University Esports Club
-          </p>
-          <LastUpdated fetchedAt={fetchedAt} tag="players-list" />
-        </div>
+        <p className="text-center text-xs text-white/20">
+          Elon University Esports Club
+        </p>
       </footer>
     </div>
   )

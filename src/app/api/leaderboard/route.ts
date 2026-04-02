@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createStaticClient } from '@/lib/supabase/static'
 import type { LeaderboardEntry } from '@/lib/types'
 
 export async function GET(request: NextRequest) {
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const rawMin = parseInt(searchParams.get('min_tournaments') ?? '3', 10)
     const minTournaments = Number.isFinite(rawMin) && rawMin >= 1 ? Math.min(rawMin, 99) : 3
 
-    const supabase = await createClient()
+    const supabase = createStaticClient()
 
     // If no semester_id provided, find current semester (or fall back to latest)
     if (!semesterId) {
