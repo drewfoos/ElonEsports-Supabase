@@ -123,7 +123,9 @@ function Fireworks({ active }: { active: boolean }) {
         p.life--
 
         if (p.life <= 0) {
-          particles.splice(i, 1)
+          // Swap-and-pop: O(1) removal instead of O(n) splice
+          particles[i] = particles[particles.length - 1]
+          particles.pop()
           continue
         }
 
@@ -143,6 +145,11 @@ function Fireworks({ active }: { active: boolean }) {
       }
 
       ctx!.globalAlpha = 1
+
+      // Stop the loop once all particles are gone and all bursts fired
+      if (particles.length === 0 && burstCountRef.current >= maxBursts) {
+        return
+      }
       animRef.current = requestAnimationFrame(animate)
     }
 
@@ -188,7 +195,7 @@ export function LeaderboardClient({
   const [entries, setEntries] = useState<LeaderboardEntry[]>(initialEntries)
   const [loading, setLoading] = useState(false)
   const [showFireworks, setShowFireworks] = useState(false)
-  const isInitialLoad = useRef(true)
+  const sliderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Trigger fireworks on mount if we have data
   useEffect(() => {
@@ -197,22 +204,16 @@ export function LeaderboardClient({
     }
   }, [initialEntries.length])
 
-  // Fetch leaderboard when semester or min tournaments changes (skip initial)
-  const fetchLeaderboard = useCallback(async () => {
-    if (!selectedSemesterId) return
-    if (isInitialLoad.current) {
-      isInitialLoad.current = false
-      return
-    }
-
+  // Shared fetch function — called directly from handlers, not via useEffect
+  const doFetch = useCallback(async (semId: string, minT: number) => {
+    if (!semId) return
     setLoading(true)
     setShowFireworks(false)
     try {
       const params = new URLSearchParams({
-        semester_id: selectedSemesterId,
-        min_tournaments: minTournaments.toString(),
+        semester_id: semId,
+        min_tournaments: minT.toString(),
       })
-
       const res = await fetch(`/api/leaderboard?${params}`)
       if (res.ok) {
         const data: LeaderboardEntry[] = await res.json()
@@ -228,11 +229,22 @@ export function LeaderboardClient({
     } finally {
       setLoading(false)
     }
-  }, [selectedSemesterId, minTournaments])
+  }, [])
 
-  useEffect(() => {
-    fetchLeaderboard()
-  }, [fetchLeaderboard])
+  const handleSemesterChange = useCallback((id: string | null) => {
+    if (!id) return
+    setSelectedSemesterId(id)
+    doFetch(id, minTournaments)
+  }, [doFetch, minTournaments])
+
+  // Debounced slider: update display immediately, fetch after user stops dragging
+  const handleMinTournamentsChange = useCallback((val: number) => {
+    setMinTournaments(val)
+    if (sliderTimerRef.current) clearTimeout(sliderTimerRef.current)
+    sliderTimerRef.current = setTimeout(() => {
+      doFetch(selectedSemesterId, val)
+    }, 300)
+  }, [doFetch, selectedSemesterId])
 
   const top3 = entries.slice(0, 3)
   const hasEntries = entries.length > 0
@@ -290,7 +302,7 @@ export function LeaderboardClient({
             </label>
             <Select
               value={selectedSemesterId}
-              onValueChange={(val) => setSelectedSemesterId(val as string)}
+              onValueChange={handleSemesterChange}
             >
               <SelectTrigger className="w-full sm:w-52 border-white/[0.08] bg-white/[0.03] text-white/80 [&>svg]:text-white/30">
                 <SelectValue placeholder="Select semester">
@@ -319,7 +331,7 @@ export function LeaderboardClient({
                 max={5}
                 step={1}
                 value={minTournaments}
-                onChange={(e) => setMinTournaments(Number(e.target.value))}
+                onChange={(e) => handleMinTournamentsChange(Number(e.target.value))}
                 className="w-full cursor-pointer accent-indigo-400"
               />
             </div>

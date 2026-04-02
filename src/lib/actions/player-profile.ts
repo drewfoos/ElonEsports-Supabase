@@ -38,6 +38,10 @@ export interface PlayerProfile {
   bestPlacement: number | null
   /** Current semester rank (if any) */
   currentRank: number | null
+  /** Aggregated set stats (computed server-side) */
+  totalSets: number
+  totalWins: number
+  winPct: string | null
 }
 
 export async function getPlayerProfile(
@@ -208,24 +212,31 @@ export async function getPlayerProfile(
     }))
     .sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses))
 
-  // -- Aggregate stats --
+  // -- Aggregate stats (computed server-side to avoid client recomputation) --
   const bestPlacement =
     tournamentResults.length > 0
       ? Math.min(...tournamentResults.map((r) => r.placement))
       : null
 
-  // Current rank = latest semester with scores
   const currentRank =
     semesterScores.length > 0
       ? semesterScores[semesterScores.length - 1].rank
       : null
 
+  const totalSets = headToHead.reduce((sum, h) => sum + h.wins + h.losses, 0)
+  const totalWins = headToHead.reduce((sum, h) => sum + h.wins, 0)
+  const winPct = totalSets > 0 ? ((totalWins / totalSets) * 100).toFixed(0) : null
+
   return {
     player,
-    semesterScores,
-    tournamentResults,
+    // Pre-reversed so client doesn't need to copy+reverse on every render
+    semesterScores: semesterScores.reverse(),
+    tournamentResults: tournamentResults.reverse(),
     headToHead,
     bestPlacement,
     currentRank,
+    totalSets,
+    totalWins,
+    winPct,
   }
 }

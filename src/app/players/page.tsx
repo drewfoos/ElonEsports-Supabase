@@ -15,27 +15,13 @@ const getPlayersData = unstable_cache(
   async () => {
     const supabase = createStaticClient()
 
-    // Fetch all Elon players (across all semesters), best placements, and set records — in parallel
-    const [statusRes, resultsRes, winsRes, lossesRes] = await Promise.all([
-      supabase
-        .from('player_semester_status')
-        .select('player_id, players(id, gamer_tag)')
-        .eq('is_elon_student', true),
-      supabase
-        .from('tournament_results')
-        .select('player_id, placement'),
-      supabase
-        .from('sets')
-        .select('winner_player_id'),
-      supabase
-        .from('sets')
-        .select('loser_player_id'),
-    ])
+    // 1. Fetch Elon player IDs first
+    const statusRes = await supabase
+      .from('player_semester_status')
+      .select('player_id, players(id, gamer_tag)')
+      .eq('is_elon_student', true)
 
     const statuses = statusRes.data ?? []
-    const results = resultsRes.data ?? []
-    const wins = winsRes.data ?? []
-    const losses = lossesRes.data ?? []
 
     // Deduplicate players (may appear in multiple semesters)
     const playerMap: Record<string, { id: string; gamer_tag: string }> = {}
@@ -43,6 +29,31 @@ const getPlayersData = unstable_cache(
       const player = s.players as unknown as { id: string; gamer_tag: string }
       playerMap[s.player_id] = player
     }
+
+    const elonIds = Object.keys(playerMap)
+    if (elonIds.length === 0) {
+      return { players: [] as PlayerListItem[], fetchedAt: Date.now() }
+    }
+
+    // 2. Fetch only Elon players' results and sets in parallel
+    const [resultsRes, winsRes, lossesRes] = await Promise.all([
+      supabase
+        .from('tournament_results')
+        .select('player_id, placement')
+        .in('player_id', elonIds),
+      supabase
+        .from('sets')
+        .select('winner_player_id')
+        .in('winner_player_id', elonIds),
+      supabase
+        .from('sets')
+        .select('loser_player_id')
+        .in('loser_player_id', elonIds),
+    ])
+
+    const results = resultsRes.data ?? []
+    const wins = winsRes.data ?? []
+    const losses = lossesRes.data ?? []
 
     // Best placement + tournament count per player (single pass)
     const bestPlacement: Record<string, number> = {}

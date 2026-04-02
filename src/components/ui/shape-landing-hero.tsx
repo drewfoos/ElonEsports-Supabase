@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { LazyMotion, domAnimation, m } from "framer-motion";
 import { Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +21,7 @@ function ElegantShape({
     gradient?: string;
 }) {
     return (
-        <motion.div
+        <m.div
             initial={{
                 opacity: 0,
                 y: -150,
@@ -40,7 +40,7 @@ function ElegantShape({
             }}
             className={cn("absolute", className)}
         >
-            <motion.div
+            <m.div
                 animate={{
                     y: [0, 15, 0],
                 }}
@@ -66,10 +66,23 @@ function ElegantShape({
                         "after:bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.2),transparent_70%)]"
                     )}
                 />
-            </motion.div>
-        </motion.div>
+            </m.div>
+        </m.div>
     );
 }
+
+const fadeUpVariants = {
+    hidden: { opacity: 0, y: 30 },
+    visible: (i: number) => ({
+        opacity: 1,
+        y: 0,
+        transition: {
+            duration: 1,
+            delay: 0.5 + i * 0.2,
+            ease: [0.25, 0.4, 0.25, 1] as [number, number, number, number],
+        },
+    }),
+};
 
 function HeroGeometric({
     badge = "Design Collective",
@@ -82,20 +95,8 @@ function HeroGeometric({
     title2?: string;
     children?: React.ReactNode;
 }) {
-    const fadeUpVariants = {
-        hidden: { opacity: 0, y: 30 },
-        visible: (i: number) => ({
-            opacity: 1,
-            y: 0,
-            transition: {
-                duration: 1,
-                delay: 0.5 + i * 0.2,
-                ease: [0.25, 0.4, 0.25, 1] as [number, number, number, number],
-            },
-        }),
-    };
-
     return (
+        <LazyMotion features={domAnimation}>
         <div className="relative w-full overflow-hidden bg-[#030303]">
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/[0.05] via-transparent to-rose-500/[0.05] blur-3xl" />
 
@@ -148,7 +149,7 @@ function HeroGeometric({
 
             <div className="relative z-10 container mx-auto px-4 md:px-6 pt-16 pb-20 sm:pt-24 sm:pb-28 md:pt-32 md:pb-32">
                 <div className="max-w-3xl mx-auto text-center">
-                    <motion.div
+                    <m.div
                         custom={0}
                         variants={fadeUpVariants}
                         initial="hidden"
@@ -159,9 +160,9 @@ function HeroGeometric({
                         <span className="text-sm text-white/60 tracking-wide">
                             {badge}
                         </span>
-                    </motion.div>
+                    </m.div>
 
-                    <motion.div
+                    <m.div
                         custom={1}
                         variants={fadeUpVariants}
                         initial="hidden"
@@ -180,23 +181,24 @@ function HeroGeometric({
                                 {title2}
                             </span>
                         </h1>
-                    </motion.div>
+                    </m.div>
 
                     {children && (
-                        <motion.div
+                        <m.div
                             custom={2}
                             variants={fadeUpVariants}
                             initial="hidden"
                             animate="visible"
                         >
                             {children}
-                        </motion.div>
+                        </m.div>
                     )}
                 </div>
             </div>
 
             <div className="absolute inset-0 bg-gradient-to-t from-[#030303] via-transparent to-[#030303]/80 pointer-events-none" />
         </div>
+        </LazyMotion>
     );
 }
 

@@ -36,11 +36,9 @@ import type { PlayerProfile } from '@/lib/actions/player-profile'
 // ---------------------------------------------------------------------------
 
 export function ProfileClient({ profile, fetchedAt }: { profile: PlayerProfile; fetchedAt: number }) {
-  const { player, semesterScores, tournamentResults, headToHead, bestPlacement, currentRank } = profile
-  const totalSets = headToHead.reduce((sum, h) => sum + h.wins + h.losses, 0)
-  const totalWins = headToHead.reduce((sum, h) => sum + h.wins, 0)
-  const winPct = totalSets > 0 ? ((totalWins / totalSets) * 100).toFixed(0) : null
-  const latestScore = semesterScores.length > 0 ? semesterScores[semesterScores.length - 1] : null
+  const { player, semesterScores, tournamentResults, headToHead, bestPlacement, currentRank, totalSets, totalWins, winPct } = profile
+  // semesterScores and tournamentResults arrive pre-reversed (newest first) from the server
+  const latestScore = semesterScores.length > 0 ? semesterScores[0] : null
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -152,7 +150,7 @@ export function ProfileClient({ profile, fetchedAt }: { profile: PlayerProfile; 
         {semesterScores.length > 0 && (
           <Section icon={<Award className="h-5 w-5 text-violet-400" />} title="Semester Rankings">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {[...semesterScores].reverse().map((s) => (
+              {semesterScores.map((s) => (
                 <Card key={s.semester_id} className="group border-border/50 transition-colors hover:border-border">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
@@ -570,8 +568,6 @@ function TournamentHistoryTable({
 }: {
   results: PlayerProfile['tournamentResults']
 }) {
-  const sorted = [...results].reverse()
-
   return (
     <Card className="overflow-hidden border-border/50">
       <CardContent className="p-0">
@@ -591,7 +587,7 @@ function TournamentHistoryTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sorted.map((r, i) => (
+            {results.map((r, i) => (
               <TableRow
                 key={r.tournament_id}
                 className="hover:bg-muted/20"
