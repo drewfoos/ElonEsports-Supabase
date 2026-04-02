@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   getPlayers,
   getPlayersWithStatus,
   getPlayersWithTournamentCount,
+  getAllPlayersPaginated,
   createPlayer,
   updatePlayer,
   deletePlayer,
@@ -53,13 +54,281 @@ import { toast } from 'sonner'
 import type { Player, Semester } from '@/lib/types'
 
 type PlayerWithStatus = Player & { is_elon_student: boolean }
+type AllPlayer = Player & { tournament_count: number }
+
+const PAGE_SIZE = 50
+
+// ---------------------------------------------------------------------------
+// Tab button
+// ---------------------------------------------------------------------------
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+        active
+          ? 'bg-primary text-primary-foreground'
+          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// All Players Tab (paginated, server-side search)
+// ---------------------------------------------------------------------------
+
+const AllPlayerRow = React.memo(function AllPlayerRow({
+  player,
+  onEdit,
+  onDelete,
+  onManageIds,
+}: {
+  player: AllPlayer
+  onEdit: (p: Player) => void
+  onDelete: (p: Player) => void
+  onManageIds: (p: Player) => void
+}) {
+  return (
+    <TableRow>
+      <TableCell className="font-medium">{player.gamer_tag}</TableCell>
+      <TableCell>
+        <button
+          type="button"
+          onClick={() => onManageIds(player)}
+          className="flex flex-wrap gap-1 rounded px-1 py-0.5 hover:bg-accent transition-colors"
+          title="Click to manage start.gg IDs"
+        >
+          {player.startgg_player_ids.length > 0 ? (
+            player.startgg_player_ids.map(id => (
+              <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
+            ))
+          ) : (
+            <span className="text-xs text-muted-foreground">+ Add ID</span>
+          )}
+        </button>
+      </TableCell>
+      <TableCell className="text-muted-foreground">
+        {player.tournament_count}
+      </TableCell>
+      <TableCell>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" onClick={() => onEdit(player)}>Edit</Button>
+          <Button variant="destructive" size="sm" onClick={() => onDelete(player)}>Delete</Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+})
+
+function AllPlayersTab({
+  onEdit,
+  onDelete,
+  onManageIds,
+  refreshKey,
+}: {
+  onEdit: (p: Player) => void
+  onDelete: (p: Player) => void
+  onManageIds: (p: Player) => void
+  refreshKey: number
+}) {
+  const [players, setPlayers] = useState<AllPlayer[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  // Debounce search input (300ms)
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(value)
+      setPage(0)
+    }, 300)
+  }, [])
+
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [])
+
+  // Fetch page
+  const fetchPage = useCallback(async () => {
+    setLoading(true)
+    try {
+      const result = await getAllPlayersPaginated(page, PAGE_SIZE, debouncedSearch || undefined)
+      if (!('error' in result)) {
+        setPlayers(result.players)
+        setTotal(result.total)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [page, debouncedSearch])
+
+  useEffect(() => {
+    fetchPage()
+  }, [fetchPage, refreshKey])
+
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Input
+          placeholder="Search all players..."
+          value={search}
+          onChange={e => handleSearchChange(e.target.value)}
+          className="max-w-xs"
+        />
+        <span className="text-sm text-muted-foreground">
+          {total} player{total !== 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12 text-muted-foreground">Loading players...</div>
+      ) : players.length === 0 ? (
+        <div className="flex justify-center py-12 text-muted-foreground">
+          {debouncedSearch ? 'No players match your search' : 'No players yet'}
+        </div>
+      ) : (
+        <>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>GamerTag</TableHead>
+                  <TableHead>start.gg IDs</TableHead>
+                  <TableHead>Tournaments</TableHead>
+                  <TableHead className="w-[120px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {players.map(p => (
+                  <AllPlayerRow
+                    key={p.id}
+                    player={p}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    onManageIds={onManageIds}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                Page {page + 1} of {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page === 0}
+                  onClick={() => setPage(p => p - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages - 1}
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Semester Players Tab (existing behavior)
+// ---------------------------------------------------------------------------
+
+const SemesterPlayerRow = React.memo(function SemesterPlayerRow({
+  player,
+  toggling,
+  onToggleElon,
+  onEdit,
+  onDelete,
+  onManageIds,
+}: {
+  player: PlayerWithStatus
+  toggling: boolean
+  onToggleElon: (playerId: string, newValue: boolean) => void
+  onEdit: (p: Player) => void
+  onDelete: (p: Player) => void
+  onManageIds: (p: Player) => void
+}) {
+  return (
+    <TableRow>
+      <TableCell className="font-medium">{player.gamer_tag}</TableCell>
+      <TableCell>
+        <button
+          type="button"
+          onClick={() => onManageIds(player)}
+          className="flex flex-wrap gap-1 rounded px-1 py-0.5 hover:bg-accent transition-colors"
+          title="Click to manage start.gg IDs"
+        >
+          {player.startgg_player_ids.length > 0 ? (
+            player.startgg_player_ids.map(id => (
+              <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
+            ))
+          ) : (
+            <span className="text-xs text-muted-foreground">+ Add ID</span>
+          )}
+        </button>
+      </TableCell>
+      <TableCell>
+        {toggling ? (
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-foreground" />
+            <span className="text-xs text-muted-foreground">Recalculating...</span>
+          </div>
+        ) : (
+          <Switch
+            checked={player.is_elon_student}
+            onCheckedChange={(checked) => onToggleElon(player.id, checked)}
+          />
+        )}
+      </TableCell>
+      <TableCell>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" disabled={toggling} onClick={() => onEdit(player)}>Edit</Button>
+          <Button variant="destructive" size="sm" disabled={toggling} onClick={() => onDelete(player)}>Delete</Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
 
 export default function PlayersPage() {
+  const [tab, setTab] = useState<'semester' | 'all'>('semester')
   const [players, setPlayers] = useState<PlayerWithStatus[]>([])
   const [semesters, setSemesters] = useState<Semester[]>([])
   const [selectedSemesterId, setSelectedSemesterId] = useState('')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   // Dialog state
   const [addOpen, setAddOpen] = useState(false)
@@ -73,7 +342,6 @@ export default function PlayersPage() {
   const [deleteTarget, setDeleteTarget] = useState<Player | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  // Track which players have an in-flight Elon toggle
   const [togglingElon, setTogglingElon] = useState<Set<string>>(new Set())
 
   const [idsPlayer, setIdsPlayer] = useState<Player | null>(null)
@@ -126,12 +394,60 @@ export default function PlayersPage() {
   }, [])
 
   useEffect(() => {
-    if (selectedSemesterId) loadPlayers(selectedSemesterId)
-  }, [selectedSemesterId, loadPlayers])
+    if (selectedSemesterId && tab === 'semester') loadPlayers(selectedSemesterId)
+  }, [selectedSemesterId, loadPlayers, tab])
 
-  const filtered = players.filter(p =>
-    p.gamer_tag.toLowerCase().includes(search.toLowerCase())
+  const filtered = useMemo(() =>
+    players.filter(p => p.gamer_tag.toLowerCase().includes(search.toLowerCase())),
+    [players, search]
   )
+
+  // Stable callbacks for memoized rows
+  const handleOpenEdit = useCallback((p: Player) => {
+    setEditPlayer(p)
+    setEditTag(p.gamer_tag)
+  }, [])
+
+  const handleOpenDelete = useCallback((p: Player) => {
+    setDeleteTarget(p)
+  }, [])
+
+  const handleOpenIds = useCallback((player: Player) => {
+    setIdsPlayer(player)
+    setIdsValue([...player.startgg_player_ids])
+    setIdsNewId('')
+  }, [])
+
+  const handleElonToggle = useCallback(async (playerId: string, newValue: boolean) => {
+    if (!selectedSemesterId) return
+
+    setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, is_elon_student: newValue } : p))
+    setTogglingElon(prev => new Set(prev).add(playerId))
+
+    try {
+      const result = await updatePlayerElonStatus(playerId, selectedSemesterId, newValue)
+      if ('error' in result) {
+        setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, is_elon_student: !newValue } : p))
+        toast.error(result.error)
+      } else {
+        toast.success(newValue ? 'Marked as Elon student' : 'Removed Elon status')
+      }
+    } catch {
+      setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, is_elon_student: !newValue } : p))
+      toast.error('Failed to update Elon status')
+    } finally {
+      setTogglingElon(prev => {
+        const next = new Set(prev)
+        next.delete(playerId)
+        return next
+      })
+    }
+  }, [selectedSemesterId])
+
+  function triggerRefresh() {
+    setRefreshKey(k => k + 1)
+    if (tab === 'semester' && selectedSemesterId) loadPlayers(selectedSemesterId)
+  }
 
   async function handleAdd() {
     if (!addTag.trim()) return
@@ -144,7 +460,7 @@ export default function PlayersPage() {
         toast.success(`Added "${addTag.trim()}"`)
         setAddTag('')
         setAddOpen(false)
-        loadPlayers(selectedSemesterId)
+        triggerRefresh()
       }
     } finally {
       setAddLoading(false)
@@ -161,7 +477,7 @@ export default function PlayersPage() {
       } else {
         toast.success('Updated gamer tag')
         setEditPlayer(null)
-        loadPlayers(selectedSemesterId)
+        triggerRefresh()
       }
     } finally {
       setEditLoading(false)
@@ -178,46 +494,11 @@ export default function PlayersPage() {
       } else {
         toast.success(`Deleted "${deleteTarget.gamer_tag}"`)
         setDeleteTarget(null)
-        loadPlayers(selectedSemesterId)
+        triggerRefresh()
       }
     } finally {
       setDeleteLoading(false)
     }
-  }
-
-  async function handleElonToggle(playerId: string, newValue: boolean) {
-    if (!selectedSemesterId) return
-
-    // Optimistic update — switch flips instantly
-    setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, is_elon_student: newValue } : p))
-    setTogglingElon(prev => new Set(prev).add(playerId))
-
-    try {
-      const result = await updatePlayerElonStatus(playerId, selectedSemesterId, newValue)
-      if ('error' in result) {
-        // Revert on error
-        setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, is_elon_student: !newValue } : p))
-        toast.error(result.error)
-      } else {
-        toast.success(newValue ? 'Marked as Elon student' : 'Removed Elon status')
-      }
-    } catch {
-      // Revert on error
-      setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, is_elon_student: !newValue } : p))
-      toast.error('Failed to update Elon status')
-    } finally {
-      setTogglingElon(prev => {
-        const next = new Set(prev)
-        next.delete(playerId)
-        return next
-      })
-    }
-  }
-
-  function openIdsDialog(player: Player) {
-    setIdsPlayer(player)
-    setIdsValue([...player.startgg_player_ids])
-    setIdsNewId('')
   }
 
   function handleAddId() {
@@ -241,7 +522,7 @@ export default function PlayersPage() {
       } else {
         toast.success('start.gg IDs updated')
         setIdsPlayer(null)
-        loadPlayers(selectedSemesterId)
+        triggerRefresh()
       }
     } finally {
       setIdsLoading(false)
@@ -270,7 +551,7 @@ export default function PlayersPage() {
         setMergeMergeId('')
         setKeepSearch('')
         setMergeSearch('')
-        loadPlayers(selectedSemesterId)
+        triggerRefresh()
       }
     } finally {
       setMergeLoading(false)
@@ -289,110 +570,90 @@ export default function PlayersPage() {
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Label className="text-sm text-muted-foreground">Semester</Label>
-          <Select
-            value={selectedSemesterId}
-            onValueChange={(val) => { if (val) setSelectedSemesterId(val) }}
-          >
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select semester">
-                {semesters.find((s) => s.id === selectedSemesterId)?.name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {semesters.map(s => (
-                <SelectItem key={s.id} value={s.id} label={s.name}>{s.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <Input
-          placeholder="Search players..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="max-w-xs"
-        />
+      {/* Tab switcher */}
+      <div className="flex items-center gap-1 rounded-lg bg-muted p-1 w-fit">
+        <TabButton active={tab === 'semester'} onClick={() => setTab('semester')}>
+          By Semester
+        </TabButton>
+        <TabButton active={tab === 'all'} onClick={() => setTab('all')}>
+          All Players
+        </TabButton>
       </div>
 
-      {/* Player table */}
-      {loading ? (
-        <div className="flex justify-center py-12 text-muted-foreground">Loading players...</div>
-      ) : filtered.length === 0 ? (
-        <div className="flex justify-center py-12 text-muted-foreground">
-          {search ? 'No players match your search' : 'No players yet'}
-        </div>
-      ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>GamerTag</TableHead>
-                <TableHead>start.gg IDs</TableHead>
-                <TableHead>Elon Student</TableHead>
-                <TableHead className="w-[120px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map(p => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.gamer_tag}</TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => openIdsDialog(p)}
-                      className="flex flex-wrap gap-1 rounded px-1 py-0.5 hover:bg-accent transition-colors"
-                      title="Click to manage start.gg IDs"
-                    >
-                      {p.startgg_player_ids.length > 0 ? (
-                        p.startgg_player_ids.map(id => (
-                          <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
-                        ))
-                      ) : (
-                        <span className="text-xs text-muted-foreground">+ Add ID</span>
-                      )}
-                    </button>
-                  </TableCell>
-                  <TableCell>
-                    {togglingElon.has(p.id) ? (
-                      <div className="flex items-center gap-2">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-foreground" />
-                        <span className="text-xs text-muted-foreground">Recalculating...</span>
-                      </div>
-                    ) : (
-                      <Switch
-                        checked={p.is_elon_student}
-                        onCheckedChange={(checked) => handleElonToggle(p.id, checked)}
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={togglingElon.has(p.id)}
-                        onClick={() => { setEditPlayer(p); setEditTag(p.gamer_tag) }}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        disabled={togglingElon.has(p.id)}
-                        onClick={() => setDeleteTarget(p)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+      {/* Semester tab */}
+      {tab === 'semester' && (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Label className="text-sm text-muted-foreground">Semester</Label>
+              <Select
+                value={selectedSemesterId}
+                onValueChange={(val) => { if (val) setSelectedSemesterId(val) }}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Select semester">
+                    {semesters.find((s) => s.id === selectedSemesterId)?.name}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {semesters.map(s => (
+                    <SelectItem key={s.id} value={s.id} label={s.name}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Input
+              placeholder="Search players..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="max-w-xs"
+            />
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center py-12 text-muted-foreground">Loading players...</div>
+          ) : filtered.length === 0 ? (
+            <div className="flex justify-center py-12 text-muted-foreground">
+              {search ? 'No players match your search' : 'No players yet'}
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>GamerTag</TableHead>
+                    <TableHead>start.gg IDs</TableHead>
+                    <TableHead>Elon Student</TableHead>
+                    <TableHead className="w-[120px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map(p => (
+                    <SemesterPlayerRow
+                      key={p.id}
+                      player={p}
+                      toggling={togglingElon.has(p.id)}
+                      onToggleElon={handleElonToggle}
+                      onEdit={handleOpenEdit}
+                      onDelete={handleOpenDelete}
+                      onManageIds={handleOpenIds}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* All Players tab */}
+      {tab === 'all' && (
+        <AllPlayersTab
+          onEdit={handleOpenEdit}
+          onDelete={handleOpenDelete}
+          onManageIds={handleOpenIds}
+          refreshKey={refreshKey}
+        />
       )}
 
       {/* Add Player Dialog */}

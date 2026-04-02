@@ -107,6 +107,51 @@ export async function getPlayersWithStatus(
   return players
 }
 
+export async function getAllPlayersPaginated(
+  page: number,
+  pageSize: number,
+  search?: string
+): Promise<{ players: (Player & { tournament_count: number })[]; total: number } | { error: string }> {
+  const supabase = await createClient()
+  const from = page * pageSize
+  const to = from + pageSize - 1
+
+  // Build query with optional search
+  let countQuery = supabase
+    .from('players')
+    .select('*', { count: 'exact', head: true })
+
+  let dataQuery = supabase
+    .from('players')
+    .select('*, tournament_results(count)')
+    .order('gamer_tag')
+    .range(from, to)
+
+  if (search && search.trim()) {
+    const pattern = `%${search.trim()}%`
+    countQuery = countQuery.ilike('gamer_tag', pattern)
+    dataQuery = dataQuery.ilike('gamer_tag', pattern)
+  }
+
+  const [countRes, dataRes] = await Promise.all([countQuery, dataQuery])
+
+  if (countRes.error) return { error: countRes.error.message }
+  if (dataRes.error) return { error: dataRes.error.message }
+
+  const players = (dataRes.data ?? []).map((row) => {
+    const countArr = row.tournament_results as unknown as { count: number }[]
+    return {
+      id: row.id,
+      gamer_tag: row.gamer_tag,
+      startgg_player_ids: row.startgg_player_ids,
+      created_at: row.created_at,
+      tournament_count: countArr?.[0]?.count ?? 0,
+    }
+  })
+
+  return { players, total: countRes.count ?? 0 }
+}
+
 export async function createPlayer(
   gamerTag: string
 ): Promise<Player | { error: string }> {
