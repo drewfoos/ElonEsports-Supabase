@@ -32,17 +32,13 @@ export async function getCurrentSemester(): Promise<Semester | null | { error: s
     .select('*')
     .lte('start_date', today)
     .gte('end_date', today)
-    .single()
+    .maybeSingle()
 
   if (error) {
-    // PGRST116 = no rows found, which is a valid "no current semester" case
-    if (error.code === 'PGRST116') {
-      return null
-    }
     return { error: error.message }
   }
 
-  return data as Semester
+  return data as Semester | null
 }
 
 export async function updateSemester(
@@ -84,56 +80,50 @@ export async function updateSemester(
   // now falls outside the new range, and move them to the correct semester
   const affectedSemesterIds = new Set<string>([id])
 
-  const { data: currentTournaments } = await supabase
-    .from('tournaments')
-    .select('id, date')
-    .eq('semester_id', id)
+  // Fetch all semesters once to avoid N+1 queries in the loops below
+  const [tournamentsRes, allSemestersRes, orphanedRes] = await Promise.all([
+    supabase.from('tournaments').select('id, date').eq('semester_id', id),
+    supabase.from('semesters').select('id, start_date, end_date'),
+    supabase
+      .from('tournaments')
+      .select('id, date, semester_id')
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .neq('semester_id', id),
+  ])
 
-  for (const t of currentTournaments ?? []) {
+  const allSemesters = (allSemestersRes.data ?? []) as { id: string; start_date: string; end_date: string }[]
+  const semesterLookup = (date: string, excludeId: string) =>
+    allSemesters.find(s => s.id !== excludeId && date >= s.start_date && date <= s.end_date)
+
+  // Reassign tournaments that no longer fit the updated range
+  const moveOps: PromiseLike<unknown>[] = []
+  for (const t of tournamentsRes.data ?? []) {
     if (t.date < startDate || t.date > endDate) {
-      // Tournament no longer fits — find its new semester
-      const { data: newSem } = await supabase
-        .from('semesters')
-        .select('id')
-        .lte('start_date', t.date)
-        .gte('end_date', t.date)
-        .neq('id', id)
-        .limit(1)
-        .single()
-
+      const newSem = semesterLookup(t.date, id)
       if (newSem) {
-        await supabase
-          .from('tournaments')
-          .update({ semester_id: newSem.id })
-          .eq('id', t.id)
+        moveOps.push(
+          supabase.from('tournaments').update({ semester_id: newSem.id }).eq('id', t.id)
+        )
         affectedSemesterIds.add(newSem.id)
       }
     }
   }
 
   // Also check if any tournaments from OTHER semesters now fit this one
-  const { data: orphanedTournaments } = await supabase
-    .from('tournaments')
-    .select('id, date, semester_id')
-    .gte('date', startDate)
-    .lte('date', endDate)
-    .neq('semester_id', id)
-
-  for (const t of orphanedTournaments ?? []) {
-    // Verify the tournament's current semester no longer covers its date
-    const { data: currentSem } = await supabase
-      .from('semesters')
-      .select('start_date, end_date')
-      .eq('id', t.semester_id)
-      .single()
-
+  const semesterById = new Map(allSemesters.map(s => [s.id, s]))
+  for (const t of orphanedRes.data ?? []) {
+    const currentSem = semesterById.get(t.semester_id)
     if (currentSem && (t.date < currentSem.start_date || t.date > currentSem.end_date)) {
       affectedSemesterIds.add(t.semester_id)
-      await supabase
-        .from('tournaments')
-        .update({ semester_id: id })
-        .eq('id', t.id)
+      moveOps.push(
+        supabase.from('tournaments').update({ semester_id: id }).eq('id', t.id)
+      )
     }
+  }
+
+  if (moveOps.length > 0) {
+    await Promise.all(moveOps)
   }
 
   // Parallel: recalculate all affected semesters

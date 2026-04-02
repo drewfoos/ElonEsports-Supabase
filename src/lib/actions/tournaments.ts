@@ -14,7 +14,6 @@ import {
 } from '@/lib/startgg'
 import type {
   Tournament,
-  Semester,
   Player,
   PlayerSemesterStatus,
   ImportPreview,
@@ -104,30 +103,6 @@ export async function getTournamentResults(
 }
 
 // ---------------------------------------------------------------------------
-// Semester lookup helper
-// ---------------------------------------------------------------------------
-
-export async function determineSemester(
-  date: string
-): Promise<Semester | null> {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase
-    .from('semesters')
-    .select('*')
-    .lte('start_date', date)
-    .gte('end_date', date)
-    .limit(1)
-    .single()
-
-  if (error || !data) {
-    return null
-  }
-
-  return data as Semester
-}
-
-// ---------------------------------------------------------------------------
 // Manual tournament creation
 // ---------------------------------------------------------------------------
 
@@ -159,7 +134,15 @@ export async function createTournament(data: {
     }
   }
 
-  const semester = await determineSemester(data.date)
+  // Semester lookup using existing admin client
+  const { data: semester } = await admin
+    .from('semesters')
+    .select('id')
+    .lte('start_date', data.date)
+    .gte('end_date', data.date)
+    .limit(1)
+    .maybeSingle()
+
   if (!semester) {
     return { error: `No semester covers the date ${data.date}. Create or adjust a semester first.` }
   }
@@ -311,7 +294,7 @@ export async function confirmTournamentImport(
   const [semesterResult, duplicateResult] = await Promise.all([
     admin
       .from('semesters')
-      .select('*')
+      .select('id')
       .lte('start_date', preview.tournamentDate)
       .gte('end_date', preview.tournamentDate)
       .limit(1)
@@ -325,7 +308,7 @@ export async function confirmTournamentImport(
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ])
 
-  const semester = semesterResult.data as Semester | null
+  const semester = semesterResult.data as { id: string } | null
   if (!semester) {
     return { error: `No semester covers the tournament date ${preview.tournamentDate}. Create or adjust a semester first.` }
   }
@@ -563,10 +546,13 @@ export async function deleteTournament(
     .from('tournaments')
     .select('id, semester_id')
     .eq('id', id)
-    .single()
+    .maybeSingle()
 
-  if (fetchError || !tournament) {
-    return { error: fetchError?.message ?? 'Tournament not found' }
+  if (fetchError) {
+    return { error: fetchError.message }
+  }
+  if (!tournament) {
+    return { error: 'Tournament not found' }
   }
 
   const semesterId = tournament.semester_id as string
@@ -617,7 +603,7 @@ async function buildImportPreview(
     admin.from('players').select('id, gamer_tag, startgg_player_ids'),
     admin
       .from('semesters')
-      .select('*')
+      .select('id')
       .lte('start_date', tournamentDate)
       .gte('end_date', tournamentDate)
       .limit(1)
@@ -625,7 +611,7 @@ async function buildImportPreview(
   ])
 
   const players = (playersResult.data ?? []) as Player[]
-  const semester = semesterResult.data as Semester | null
+  const semester = semesterResult.data as { id: string } | null
 
   // Build lookup maps for O(1) matching instead of O(n) scans per standing
   const playerByStartggId = new Map<string, Player>()

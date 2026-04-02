@@ -179,12 +179,14 @@ export async function deletePlayer(
     ? [...new Set(resultsRes.data.map(r => r.tournament_id))]
     : []
 
+  let tournamentRows: { id: string; total_participants: number }[] = []
   if (affectedTournamentIds.length > 0) {
     const { data: tournaments } = await supabase
       .from('tournaments')
-      .select('semester_id')
+      .select('id, semester_id, total_participants')
       .in('id', affectedTournamentIds)
     for (const t of tournaments ?? []) affectedSemesterIds.add(t.semester_id)
+    tournamentRows = (tournaments ?? []) as { id: string; semester_id: string; total_participants: number }[]
   }
 
   const { error } = await supabase
@@ -196,23 +198,19 @@ export async function deletePlayer(
     return { error: error.message }
   }
 
-  // Parallel: decrement total_participants for each affected tournament
-  if (affectedTournamentIds.length > 0) {
-    await Promise.all(
-      affectedTournamentIds.map(async (tournamentId) => {
-        const { data: tournament } = await supabase
+  // Parallel: decrement total_participants using already-fetched data (no re-query)
+  if (tournamentRows.length > 0) {
+    const decrements = tournamentRows
+      .filter(t => t.total_participants > 0)
+      .map(t =>
+        supabase
           .from('tournaments')
-          .select('total_participants')
-          .eq('id', tournamentId)
-          .single()
-        if (tournament && tournament.total_participants > 0) {
-          await supabase
-            .from('tournaments')
-            .update({ total_participants: tournament.total_participants - 1 })
-            .eq('id', tournamentId)
-        }
-      })
-    )
+          .update({ total_participants: t.total_participants - 1 })
+          .eq('id', t.id)
+      )
+    if (decrements.length > 0) {
+      await Promise.all(decrements)
+    }
   }
 
   // Parallel: recalculate all affected semesters

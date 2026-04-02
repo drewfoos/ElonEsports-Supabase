@@ -11,34 +11,25 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient()
 
-    // If no semester_id provided, find the current semester
+    // If no semester_id provided, find current semester (or fall back to latest)
     if (!semesterId) {
       const today = new Date().toISOString().split('T')[0]
 
-      const { data: currentSemester, error: semesterError } = await supabase
+      // Single query: ordered by start_date desc, pick current or most recent
+      const { data: semesters } = await supabase
         .from('semesters')
-        .select('id')
-        .lte('start_date', today)
-        .gte('end_date', today)
-        .single()
+        .select('id, start_date, end_date')
+        .order('start_date', { ascending: false })
 
-      if (semesterError || !currentSemester) {
-        // Fall back to the most recent semester
-        const { data: latestSemester } = await supabase
-          .from('semesters')
-          .select('id')
-          .order('start_date', { ascending: false })
-          .limit(1)
-          .single()
+      const rows = semesters ?? []
+      const current = rows.find(s => s.start_date <= today && s.end_date >= today)
+      const chosen = current ?? rows[0]
 
-        if (!latestSemester) {
-          return NextResponse.json([] as LeaderboardEntry[])
-        }
-
-        semesterId = latestSemester.id
-      } else {
-        semesterId = currentSemester.id
+      if (!chosen) {
+        return NextResponse.json([] as LeaderboardEntry[])
       }
+
+      semesterId = chosen.id
     }
 
     const { data, error } = await supabase
