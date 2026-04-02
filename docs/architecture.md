@@ -152,9 +152,23 @@ Admin → POST mergePlayers(keepId, mergeId)
 
 ### Public Leaderboard
 
+- **Server-side rendering** — page.tsx is a Server Component that fetches semesters, auth state, and initial leaderboard data in parallel (zero client waterfalls on first load)
+- **Client interactivity** — semester picker, min tournaments slider, and fireworks extracted to `leaderboard-client.tsx`; subsequent filter changes fetch via `/api/leaderboard`
 - **Single semester query** — collapsed two sequential fallback queries into one sorted query with client-side pick
 - **Canvas fireworks** — particle system with gravity, glow trails, and staggered bursts; auto-cleans up after animation
 - **Staggered animations** — podium cards bounce in sequentially, table rows fade in with delay offsets
+
+## Concurrency Safety
+
+- **Advisory locks** — `recalculateSemester` acquires a per-semester `pg_try_advisory_lock` before recalculating; if another recalc is in progress, skips silently
+- **Atomic decrements** — `decrement_participants` Postgres function uses `SET total_participants = greatest(0, total_participants - N)` to avoid read-then-write races
+- **Lock release** — always in `finally` block; release errors logged but don't fail the operation
+
+## Error Handling
+
+- **`not-found.tsx`** — 404 page with navigation back to leaderboard
+- **`error.tsx`** — catches runtime errors in any route segment, logs to console, offers retry
+- **`global-error.tsx`** — catches errors that escape root layout (provides its own `<html>/<body>`)
 
 ## Scoring Engine Detail
 
@@ -194,7 +208,11 @@ Located in `/lib/scoring.ts`. Pure TypeScript functions, server-side only.
 src/
 ├── app/
 │   ├── layout.tsx                 # Root layout (dark theme, fonts, Toaster)
-│   ├── page.tsx                   # Public leaderboard with podium
+│   ├── page.tsx                   # Public leaderboard (Server Component, parallel fetch)
+│   ├── leaderboard-client.tsx     # Interactive leaderboard UI (client component)
+│   ├── not-found.tsx              # 404 page
+│   ├── error.tsx                  # Runtime error boundary
+│   ├── global-error.tsx           # Root error boundary
 │   ├── login/
 │   │   └── page.tsx               # Admin login (email/password)
 │   ├── admin/

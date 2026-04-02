@@ -4,6 +4,47 @@ All notable decisions, changes, and progress for the Elon Esports Smash PR rebui
 
 ---
 
+## 2026-04-02 — Bug Fixes, Error Pages, Performance & UX Polish
+
+### Bug Fixes (5-Agent Audit)
+- Fixed merge dialog state not resetting on close (mergeKeepId, mergeMergeId, keepSearch, mergeSearch)
+- Fixed scoring engine `existingResult` not error-checked in step 8
+- Fixed scoring engine lock release error not caught in finally block
+- Fixed missing error checks on `updateSemester` parallel fetches (tournamentsRes, allSemestersRes, orphanedRes)
+- Fixed missing `keepStatusesRes` error check in `mergePlayers`
+- Fixed missing error check on `checkSemesterOverlap` query result
+- Fixed dialog state resets for add, edit, and IDs dialogs on close
+
+### Error Pages
+- Added `not-found.tsx` (404) with "Back to Leaderboard" link
+- Added `error.tsx` (500) with "Try Again" button and console error logging
+- Added `global-error.tsx` for errors that escape root layout (includes own `<html>/<body>`)
+
+### Concurrency Safety
+- Recalculate button disabled + tooltip when semester has no tournaments (both dashboard dialog and tournaments page)
+- Server-side guard: `recalculateSemesterScores` returns early with error message if no tournaments exist
+- Per-semester tournament counts passed to dashboard recalculate dialog
+
+### Performance — Leaderboard SSR
+- Converted home page from full client-side to Server Component with parallel data fetching
+- Semesters, auth state, and initial leaderboard data fetched in one server round trip (zero client waterfalls)
+- Interactive UI (semester picker, min tournaments, fireworks) extracted to `leaderboard-client.tsx`
+- Eliminated dynamic `import()` of server actions from client bundle
+- Replaced Base UI Slider with native `<input type="range">` to fix React script tag error
+
+### UX Polish
+- "Admin" button on leaderboard styled as solid primary pill when signed in (subtle "Login" text when signed out)
+- "Load Standings" button on start.gg import: flush height with event dropdown, stacks below on mobile
+- Recalculate buttons show "No tournaments in this semester" tooltip/message when grayed out
+
+### New Files
+- `src/app/not-found.tsx` — 404 page
+- `src/app/error.tsx` — Runtime error boundary
+- `src/app/global-error.tsx` — Root error boundary
+- `src/app/leaderboard-client.tsx` — Interactive leaderboard UI (extracted from page.tsx)
+
+---
+
 ## 2026-04-01 — Leaderboard Redesign, Auto-Semesters & Query Optimization
 
 ### Leaderboard Redesign

@@ -247,7 +247,10 @@ export function LeaderboardClient({
           </div>
           <a
             href={isLoggedIn ? '/admin' : '/login'}
-            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            className={isLoggedIn
+              ? "inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              : "text-xs text-muted-foreground transition-colors hover:text-foreground"
+            }
           >
             {isLoggedIn ? 'Admin' : 'Login'}
           </a>
