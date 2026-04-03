@@ -4,6 +4,37 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v0.10.0 — SSR Optimization, Loading Skeletons & Hydration Fix
+
+### Server-Side Rendering Migration
+- **Admin Players** — split into server component (`page.tsx`) + client component (`players-client.tsx`); semesters, current semester, and initial player data fetched server-side in single `Promise.all`
+- **Admin Tournaments** — split into server component + `tournaments-client.tsx`; semesters and initial tournaments fetched server-side
+- **Admin Semesters** — split into server component + `semesters-client.tsx`; semesters fetched server-side
+- Eliminates 5+ POST requests per admin page load (was one per `useEffect` call, doubled by React StrictMode in dev)
+
+### Loading Skeletons
+- **Route-level skeletons** (`loading.tsx`) for all 7 pages: admin dashboard, players, tournaments, semesters, public leaderboard, player directory, player profile
+- Public page skeletons use dark theme (`bg-[#030303]`, `white/[0.06]` pulse) matching the cyberpunk aesthetic
+- Leaderboard and players directory skeletons use empty spacers for the hero section (reserves exact height without visible placeholders, so framer-motion entrance animations play smoothly)
+- **Inline table skeletons** for client-side loading states (semester switching, tab changes, pagination) — replaces plain "Loading..." text in all 3 admin client components
+
+### Bug Fixes
+- **Hydration mismatch in LastUpdated** — `formatTimeAgo()` called `Date.now()` during both server and client render, producing different relative timestamps ("20s ago" vs "21s ago"). Fixed by initializing state as empty string, computing only on client via `useEffect`.
+
+### New Files
+- `src/app/admin/loading.tsx` — Dashboard skeleton
+- `src/app/admin/players/loading.tsx` — Players skeleton
+- `src/app/admin/players/players-client.tsx` — Players interactive UI (extracted from page)
+- `src/app/admin/semesters/loading.tsx` — Semesters skeleton
+- `src/app/admin/semesters/semesters-client.tsx` — Semesters interactive UI (extracted from page)
+- `src/app/admin/tournaments/loading.tsx` — Tournaments skeleton
+- `src/app/admin/tournaments/tournaments-client.tsx` — Tournaments interactive UI (extracted from page)
+- `src/app/loading.tsx` — Leaderboard skeleton
+- `src/app/players/loading.tsx` — Player directory skeleton
+- `src/app/players/[playerId]/loading.tsx` — Player profile skeleton
+
+---
+
 ## v0.9.0 — Player Profile Visualizations & Import Fixes
 
 ### Player Profile Visualizations

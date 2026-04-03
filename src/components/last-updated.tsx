@@ -23,7 +23,7 @@ export function LastUpdated({
   tag: string
 }) {
   const router = useRouter()
-  const [timeAgo, setTimeAgo] = useState(() => formatTimeAgo(fetchedAt))
+  const [timeAgo, setTimeAgo] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [cooldown, setCooldown] = useState(0)
 
