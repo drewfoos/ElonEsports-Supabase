@@ -37,6 +37,7 @@ export async function getTournaments(
     .from('tournaments')
     .select('*')
     .order('date', { ascending: false })
+    .limit(10000)
 
   if (semesterId) {
     query = query.eq('semester_id', semesterId)
@@ -76,6 +77,7 @@ export async function getTournamentResults(
     `)
     .eq('tournament_id', tournamentId)
     .order('placement', { ascending: true })
+    .limit(10000)
 
   if (error) {
     console.error('getTournamentResults error:', error)
@@ -88,6 +90,7 @@ export async function getTournamentResults(
     .select('player_id')
     .eq('semester_id', semesterId)
     .eq('is_elon_student', true)
+    .limit(10000)
 
   const elonIds = new Set((statuses ?? []).map(s => s.player_id))
 
@@ -212,6 +215,7 @@ export async function createTournament(data: {
       .select('player_id')
       .eq('semester_id', semester.id)
       .in('player_id', playerIds)
+      .limit(10000)
 
     const hasStatus = new Set((existingStatus ?? []).map((r: { player_id: string }) => r.player_id))
     const needsCarryForward = playerIds.filter((id) => !hasStatus.has(id))
@@ -232,6 +236,7 @@ export async function createTournament(data: {
           .eq('semester_id', prevSemester.id)
           .eq('is_elon_student', true)
           .in('player_id', needsCarryForward)
+          .limit(10000)
 
         if (prevStatus && prevStatus.length > 0) {
           for (const r of prevStatus as { player_id: string }[]) {
@@ -247,9 +252,13 @@ export async function createTournament(data: {
   }
 
   if (elonUpserts.length > 0) {
-    await admin
+    const { error: statusError } = await admin
       .from('player_semester_status')
       .upsert(elonUpserts, { onConflict: 'player_id,semester_id' })
+
+    if (statusError) {
+      console.error('Elon status upsert error:', statusError)
+    }
   }
 
   revalidatePath('/admin/tournaments')
@@ -737,6 +746,7 @@ async function buildImportPreview(
       .from('player_semester_status')
       .select('player_id, is_elon_student')
       .eq('semester_id', semester.id)
+      .limit(10000)
 
     if (statusRows) {
       for (const row of statusRows as PlayerSemesterStatus[]) {
@@ -759,6 +769,7 @@ async function buildImportPreview(
         .select('player_id, is_elon_student')
         .eq('semester_id', prevSemester.id)
         .eq('is_elon_student', true)
+        .limit(10000)
 
       if (prevRows) {
         for (const row of prevRows as PlayerSemesterStatus[]) {

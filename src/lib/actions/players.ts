@@ -13,6 +13,7 @@ export async function getPlayers(): Promise<Player[] | { error: string }> {
     .from('players')
     .select('*')
     .order('gamer_tag')
+    .limit(10000)
 
   if (error) {
     return { error: error.message }
@@ -151,9 +152,9 @@ export async function getAllPlayersPaginated(
   const needsElonIds = elonFilter === 'elon' || elonFilter === 'non-elon'
   const [elonIdsRes, activeSemRes] = await Promise.all([
     needsElonIds
-      ? supabase.from('player_semester_status').select('player_id').eq('is_elon_student', true)
+      ? supabase.from('player_semester_status').select('player_id').eq('is_elon_student', true).limit(10000)
       : Promise.resolve(null),
-    supabase.from('tournaments').select('semester_id'),
+    supabase.from('tournaments').select('semester_id').limit(10000),
   ])
 
   if (elonIdsRes && 'error' in elonIdsRes && elonIdsRes.error) return { error: elonIdsRes.error.message }
@@ -207,6 +208,7 @@ export async function getAllPlayersPaginated(
       .select('player_id, semester_id, semester:semesters!inner(name)')
       .eq('is_elon_student', true)
       .in('player_id', playerIds)
+      .limit(10000)
 
     for (const row of statusRows ?? []) {
       // Only include semesters that actually have tournaments
@@ -342,6 +344,7 @@ export async function getPlayersWithTournamentCount(): Promise<
     .from('players')
     .select('*, tournament_results(count)')
     .order('gamer_tag')
+    .limit(10000)
 
   if (error) {
     return { error: error.message }
@@ -399,10 +402,10 @@ export async function mergePlayers(
     keepResultsRes, mergeResultsRes,
     keepPlayerRes, mergePlayerRes,
   ] = await Promise.all([
-    supabase.from('player_semester_status').select('semester_id').eq('player_id', keepId),
-    supabase.from('player_semester_status').select('*').eq('player_id', mergeId),
-    supabase.from('tournament_results').select('*').eq('player_id', keepId),
-    supabase.from('tournament_results').select('*').eq('player_id', mergeId),
+    supabase.from('player_semester_status').select('semester_id').eq('player_id', keepId).limit(10000),
+    supabase.from('player_semester_status').select('*').eq('player_id', mergeId).limit(10000),
+    supabase.from('tournament_results').select('*').eq('player_id', keepId).limit(10000),
+    supabase.from('tournament_results').select('*').eq('player_id', mergeId).limit(10000),
     supabase.from('players').select('startgg_player_ids').eq('id', keepId).single(),
     supabase.from('players').select('startgg_player_ids').eq('id', mergeId).single(),
   ])

@@ -58,17 +58,39 @@ export async function updateSemester(
   const overlapError = await checkSemesterOverlap(supabase, startDate, endDate, id)
   if (overlapError) return { error: overlapError }
 
-  // Get the old date range so we can find tournaments that need reassignment
-  const { data: oldSemester, error: oldError } = await supabase
-    .from('semesters')
-    .select('start_date, end_date')
-    .eq('id', id)
-    .single()
+  // Pre-flight: check if shrinking the range would strand any tournaments
+  // Fetch current tournaments + all semesters before updating
+  const [oldSemRes, curTournamentsRes, allSemestersRes] = await Promise.all([
+    supabase.from('semesters').select('start_date, end_date').eq('id', id).single(),
+    supabase.from('tournaments').select('id, date').eq('semester_id', id).limit(10000),
+    supabase.from('semesters').select('id, start_date, end_date').limit(10000),
+  ])
 
-  if (oldError || !oldSemester) {
-    return { error: oldError?.message ?? 'Semester not found' }
+  if (oldSemRes.error || !oldSemRes.data) {
+    return { error: oldSemRes.error?.message ?? 'Semester not found' }
+  }
+  if (curTournamentsRes.error) return { error: curTournamentsRes.error.message }
+  if (allSemestersRes.error) return { error: allSemestersRes.error.message }
+
+  const allSemesters = (allSemestersRes.data ?? []) as { id: string; start_date: string; end_date: string }[]
+  const semesterLookup = (date: string, excludeId: string) =>
+    allSemesters.find(s => s.id !== excludeId && date >= s.start_date && date <= s.end_date)
+
+  // Check for tournaments that would fall outside ALL semesters
+  const stranded: string[] = []
+  for (const t of curTournamentsRes.data ?? []) {
+    if (t.date < startDate || t.date > endDate) {
+      if (!semesterLookup(t.date, id)) {
+        stranded.push(t.date)
+      }
+    }
   }
 
+  if (stranded.length > 0) {
+    return { error: `Cannot shrink range — ${stranded.length} tournament(s) (dates: ${stranded.join(', ')}) would fall outside all semesters. Create a semester covering those dates first, or keep the range wide enough.` }
+  }
+
+  // Safe to update
   const { data, error } = await supabase
     .from('semesters')
     .update({ start_date: startDate, end_date: endDate })
@@ -80,33 +102,11 @@ export async function updateSemester(
     return { error: error.message }
   }
 
-  // Reassign tournaments: find all tournaments in this semester whose date
-  // now falls outside the new range, and move them to the correct semester
-  const affectedSemesterIds = new Set<string>([id])
-
-  // Fetch all semesters once to avoid N+1 queries in the loops below
-  const [tournamentsRes, allSemestersRes, orphanedRes] = await Promise.all([
-    supabase.from('tournaments').select('id, date').eq('semester_id', id),
-    supabase.from('semesters').select('id, start_date, end_date'),
-    supabase
-      .from('tournaments')
-      .select('id, date, semester_id')
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .neq('semester_id', id),
-  ])
-
-  if (tournamentsRes.error) return { error: tournamentsRes.error.message }
-  if (allSemestersRes.error) return { error: allSemestersRes.error.message }
-  if (orphanedRes.error) return { error: orphanedRes.error.message }
-
-  const allSemesters = (allSemestersRes.data ?? []) as { id: string; start_date: string; end_date: string }[]
-  const semesterLookup = (date: string, excludeId: string) =>
-    allSemesters.find(s => s.id !== excludeId && date >= s.start_date && date <= s.end_date)
-
   // Reassign tournaments that no longer fit the updated range
+  const affectedSemesterIds = new Set<string>([id])
   const moveOps: PromiseLike<unknown>[] = []
-  for (const t of tournamentsRes.data ?? []) {
+
+  for (const t of curTournamentsRes.data ?? []) {
     if (t.date < startDate || t.date > endDate) {
       const newSem = semesterLookup(t.date, id)
       if (newSem) {
@@ -119,8 +119,16 @@ export async function updateSemester(
   }
 
   // Also check if any tournaments from OTHER semesters now fit this one
+  const { data: orphanedData } = await supabase
+    .from('tournaments')
+    .select('id, date, semester_id')
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .neq('semester_id', id)
+    .limit(10000)
+
   const semesterById = new Map(allSemesters.map(s => [s.id, s]))
-  for (const t of orphanedRes.data ?? []) {
+  for (const t of orphanedData ?? []) {
     const currentSem = semesterById.get(t.semester_id)
     if (currentSem && (t.date < currentSem.start_date || t.date > currentSem.end_date)) {
       affectedSemesterIds.add(t.semester_id)
@@ -268,9 +276,8 @@ async function checkSemesterOverlap(
  *   Spring: Jan 1 – Jul 31
  *   Fall:   Aug 1 – Dec 31
  *
- * If the auto-generated range would overlap an existing semester, the range
- * is trimmed to fit (start after the overlapping semester ends, or end before
- * it starts).
+ * If the auto-generated range would overlap an existing semester, returns an
+ * error asking the admin to adjust dates manually (prevents sliver semesters).
  */
 export async function findOrCreateSemester(
   date: string,
@@ -309,7 +316,8 @@ export async function findOrCreateSemester(
     endDate = `${year}-12-31`
   }
 
-  // Check for overlapping semesters and trim the range to avoid conflicts
+  // Check for overlapping semesters — refuse to create if any exist
+  // (prevents confusing sliver semesters from trimming logic)
   const { data: overlapping } = await client
     .from('semesters')
     .select('id, name, start_date, end_date')
@@ -317,30 +325,9 @@ export async function findOrCreateSemester(
     .gte('end_date', startDate)
 
   if (overlapping && overlapping.length > 0) {
-    // Sort by start_date
-    const sorted = overlapping.sort((a, b) => a.start_date.localeCompare(b.start_date))
-
-    // Find the gap where our date fits
-    // The date doesn't fall in any existing semester, so it must be in a gap
-    for (const sem of sorted) {
-      if (date < sem.start_date && startDate < sem.start_date) {
-        // Our date is before this semester — trim endDate to day before it starts
-        const dayBefore = new Date(sem.start_date + 'T00:00:00')
-        dayBefore.setDate(dayBefore.getDate() - 1)
-        endDate = dayBefore.toISOString().split('T')[0]
-        break
-      }
-      if (date > sem.end_date) {
-        // Our date is after this semester — trim startDate to day after it ends
-        const dayAfter = new Date(sem.end_date + 'T00:00:00')
-        dayAfter.setDate(dayAfter.getDate() + 1)
-        startDate = dayAfter.toISOString().split('T')[0]
-      }
-    }
-
-    // Final sanity check: date must still be within the trimmed range
-    if (date < startDate || date > endDate || startDate >= endDate) {
-      return { error: `Cannot auto-create semester for ${date} — overlapping semesters leave no room. Adjust existing semester dates first.` }
+    const names = overlapping.map(s => `"${s.name}" (${s.start_date} – ${s.end_date})`).join(', ')
+    return {
+      error: `Tournament date ${date} doesn't fall within any existing semester, and auto-creating "${name}" (${startDate} – ${endDate}) would overlap with ${names}. Edit the existing semester's dates to cover this tournament date, then re-import.`,
     }
   }
 

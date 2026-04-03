@@ -77,19 +77,23 @@ export async function getPlayerProfile(
       .from('player_semester_scores')
       .select('semester_id, total_score, tournament_count, average_score, semesters(name, start_date)')
       .eq('player_id', playerId)
-      .order('semester_id'),
+      .order('semester_id')
+      .limit(10000),
     supabase
       .from('tournament_results')
       .select('tournament_id, placement, score, tournaments(name, date, semester_id, total_participants, elon_participants, weight, startgg_slug, semesters(name))')
-      .eq('player_id', playerId),
+      .eq('player_id', playerId)
+      .limit(10000),
     supabase
       .from('sets')
       .select('loser_player_id')
-      .eq('winner_player_id', playerId),
+      .eq('winner_player_id', playerId)
+      .limit(10000),
     supabase
       .from('sets')
       .select('winner_player_id')
-      .eq('loser_player_id', playerId),
+      .eq('loser_player_id', playerId)
+      .limit(10000),
   ])
 
   // -- Parse semester IDs and h2h opponent IDs before the next parallel batch --
@@ -124,6 +128,7 @@ export async function getPlayerProfile(
           .select('player_id, semester_id, average_score')
           .in('semester_id', semesterIds)
           .order('average_score', { ascending: true })
+          .limit(10000)
       : Promise.resolve({ data: null }),
     opponentIds.length > 0
       ? supabase

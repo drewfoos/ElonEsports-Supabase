@@ -20,6 +20,7 @@ const getPlayersData = unstable_cache(
       .from('player_semester_status')
       .select('player_id, players(id, gamer_tag)')
       .eq('is_elon_student', true)
+      .limit(10000)
 
     const statuses = statusRes.data ?? []
 
