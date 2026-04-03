@@ -40,15 +40,18 @@ const getPlayersData = unstable_cache(
       supabase
         .from('tournament_results')
         .select('player_id, placement')
-        .in('player_id', elonIds),
+        .in('player_id', elonIds)
+        .limit(10000),
       supabase
         .from('sets')
         .select('winner_player_id')
-        .in('winner_player_id', elonIds),
+        .in('winner_player_id', elonIds)
+        .limit(10000),
       supabase
         .from('sets')
         .select('loser_player_id')
-        .in('loser_player_id', elonIds),
+        .in('loser_player_id', elonIds)
+        .limit(10000),
     ])
 
     const results = resultsRes.data ?? []
