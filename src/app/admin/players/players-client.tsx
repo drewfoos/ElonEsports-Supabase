@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  getPlayers,
   getPlayersWithStatus,
   getPlayersWithTournamentCount,
   getAllPlayersPaginated,
@@ -365,19 +364,25 @@ export default function PlayersClient({
   initialSemesters,
   initialSemesterId,
   initialPlayers,
+  initialTotal,
 }: {
   initialSemesters: Semester[]
   initialSemesterId: string
   initialPlayers: PlayerWithStatus[]
+  initialTotal: number
 }) {
   const [tab, setTab] = useState<'semester' | 'all'>('semester')
   const [players, setPlayers] = useState<PlayerWithStatus[]>(initialPlayers)
+  const [semTotal, setSemTotal] = useState(initialTotal)
+  const [semPage, setSemPage] = useState(0)
   const [semesters, setSemesters] = useState<Semester[]>(initialSemesters)
   const [selectedSemesterId, setSelectedSemesterId] = useState(initialSemesterId)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [elonFilter, setElonFilter] = useState<ElonFilter>('all')
+  const semDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   // Dialog state
   const [addOpen, setAddOpen] = useState(false)
@@ -404,43 +409,52 @@ export default function PlayersClient({
   const [keepSearch, setKeepSearch] = useState('')
   const [mergeSearch, setMergeSearch] = useState('')
 
-  // Ref to skip loading players on first render (already have initialPlayers)
-  const initialLoad = useRef(true)
+  // Cleanup debounce timer
+  useEffect(() => {
+    return () => { if (semDebounceRef.current) clearTimeout(semDebounceRef.current) }
+  }, [])
 
-  const loadPlayers = useCallback(async (semId: string) => {
+  // Debounced search for semester tab
+  const handleSemSearch = useCallback((value: string) => {
+    setSearch(value)
+    if (semDebounceRef.current) clearTimeout(semDebounceRef.current)
+    semDebounceRef.current = setTimeout(() => {
+      setDebouncedSearch(value)
+      setSemPage(0)
+    }, 300)
+  }, [])
+
+  // Reset page when filter changes
+  useEffect(() => { setSemPage(0) }, [elonFilter])
+
+  // Fetch semester players page
+  const loadPlayers = useCallback(async (semId: string, pg: number, srch: string, filter: ElonFilter) => {
     setLoading(true)
     try {
-      if (semId) {
-        const data = await getPlayersWithStatus(semId)
-        if (!('error' in data)) setPlayers(data)
-      } else {
-        const data = await getPlayers()
-        if (!('error' in data)) {
-          setPlayers(data.map(p => ({ ...p, is_elon_student: false })))
-        }
+      const data = await getPlayersWithStatus(semId, pg, PAGE_SIZE, srch || undefined, filter)
+      if (!('error' in data)) {
+        setPlayers(data.players)
+        setSemTotal(data.total)
       }
     } finally {
       setLoading(false)
     }
   }, [])
 
+  // Ref to skip loading players on first render (already have initialPlayers)
+  const initialLoad = useRef(true)
+
   useEffect(() => {
     if (initialLoad.current) {
       initialLoad.current = false
       return
     }
-    if (selectedSemesterId && tab === 'semester') loadPlayers(selectedSemesterId)
-  }, [selectedSemesterId, loadPlayers, tab])
+    if (selectedSemesterId && tab === 'semester') {
+      loadPlayers(selectedSemesterId, semPage, debouncedSearch, elonFilter)
+    }
+  }, [selectedSemesterId, semPage, debouncedSearch, elonFilter, loadPlayers, tab])
 
-  const filtered = useMemo(() =>
-    players.filter(p => {
-      if (!p.gamer_tag.toLowerCase().includes(search.toLowerCase())) return false
-      if (elonFilter === 'elon' && !p.is_elon_student) return false
-      if (elonFilter === 'non-elon' && p.is_elon_student) return false
-      return true
-    }),
-    [players, search, elonFilter]
-  )
+  const semTotalPages = Math.ceil(semTotal / PAGE_SIZE)
 
   // Stable callbacks for memoized rows
   const handleOpenEdit = useCallback((p: Player) => {
@@ -482,7 +496,7 @@ export default function PlayersClient({
 
   function triggerRefresh() {
     setRefreshKey(k => k + 1)
-    if (tab === 'semester' && selectedSemesterId) loadPlayers(selectedSemesterId)
+    if (tab === 'semester' && selectedSemesterId) loadPlayers(selectedSemesterId, semPage, debouncedSearch, elonFilter)
   }
 
   async function handleAdd() {
@@ -643,7 +657,7 @@ export default function PlayersClient({
               <Label className="text-sm text-muted-foreground">Semester</Label>
               <Select
                 value={selectedSemesterId}
-                onValueChange={(val) => { if (val) setSelectedSemesterId(val) }}
+                onValueChange={(val) => { if (val) { setSelectedSemesterId(val); setSemPage(0) } }}
               >
                 <SelectTrigger className="w-[200px]">
                   <SelectValue placeholder="Select semester">
@@ -660,42 +674,74 @@ export default function PlayersClient({
             <Input
               placeholder="Search players..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => handleSemSearch(e.target.value)}
               className="max-w-xs"
             />
+            <span className="text-sm text-muted-foreground">
+              {semTotal} player{semTotal !== 1 ? 's' : ''}
+            </span>
           </div>
 
           {loading ? (
             <TableSkeleton />
-          ) : filtered.length === 0 ? (
+          ) : players.length === 0 ? (
             <div className="flex justify-center py-12 text-muted-foreground">
-              {search ? 'No players match your search' : 'No players yet'}
+              {debouncedSearch || elonFilter !== 'all' ? 'No players match your filters' : 'No players yet'}
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>GamerTag</TableHead>
-                    <TableHead>start.gg IDs</TableHead>
-                    <TableHead>Elon Student</TableHead>
-                    <TableHead className="w-[120px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map(p => (
-                    <SemesterPlayerRow
-                      key={p.id}
-                      player={p}
-                      toggling={togglingElon.has(p.id)}
-                      onToggleElon={handleElonToggle}
-                      onEdit={handleOpenEdit}
-                      onManageIds={handleOpenIds}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>GamerTag</TableHead>
+                      <TableHead>start.gg IDs</TableHead>
+                      <TableHead>Elon Student</TableHead>
+                      <TableHead className="w-[120px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {players.map(p => (
+                      <SemesterPlayerRow
+                        key={p.id}
+                        player={p}
+                        toggling={togglingElon.has(p.id)}
+                        onToggleElon={handleElonToggle}
+                        onEdit={handleOpenEdit}
+                        onManageIds={handleOpenIds}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              {semTotalPages > 1 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    Page {semPage + 1} of {semTotalPages}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={semPage === 0}
+                      onClick={() => setSemPage(p => p - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={semPage >= semTotalPages - 1}
+                      onClick={() => setSemPage(p => p + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </>
       )}

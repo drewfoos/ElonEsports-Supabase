@@ -4,6 +4,17 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v0.10.1 — Semester Tab Pagination
+
+### Admin Players — Semester Tab
+- Server-side pagination for the "By Semester" tab (was rendering all 500+ players from mixed locals at once)
+- 50 players per page with Previous/Next controls and total count
+- Debounced server-side search (300ms) — resets to page 1
+- Elon filter applied server-side — resets to page 1
+- `getPlayersWithStatus` now accepts `page`, `pageSize`, `search`, and `elonFilter` params
+
+---
+
 ## v0.10.0 — SSR Optimization, Loading Skeletons & Hydration Fix
 
 ### Server-Side Rendering Migration

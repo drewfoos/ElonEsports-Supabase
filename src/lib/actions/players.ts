@@ -22,8 +22,15 @@ export async function getPlayers(): Promise<Player[] | { error: string }> {
 }
 
 export async function getPlayersWithStatus(
-  semesterId: string
-): Promise<(Player & { is_elon_student: boolean })[] | { error: string }> {
+  semesterId: string,
+  page = 0,
+  pageSize = 50,
+  search?: string,
+  elonFilter?: 'all' | 'elon' | 'non-elon'
+): Promise<{
+  players: (Player & { is_elon_student: boolean })[]
+  total: number
+} | { error: string }> {
   const supabase = await createClient()
 
   // First, find player IDs who actually participated in this semester's tournaments
@@ -39,19 +46,19 @@ export async function getPlayersWithStatus(
   const tournamentIds = (tournaments ?? []).map((t) => t.id)
 
   if (tournamentIds.length === 0) {
-    return [] // No tournaments this semester = no players to show
+    return { players: [], total: 0 }
   }
 
   // Get distinct player IDs from tournament results (paginated to avoid 1000-row default limit)
   const allPlayerIds: string[] = []
-  let from = 0
-  const PAGE = 1000
+  let fromRow = 0
+  const FETCH_PAGE = 1000
   while (true) {
     const { data: results, error: resultsError } = await supabase
       .from('tournament_results')
       .select('player_id')
       .in('tournament_id', tournamentIds)
-      .range(from, from + PAGE - 1)
+      .range(fromRow, fromRow + FETCH_PAGE - 1)
 
     if (resultsError) {
       return { error: resultsError.message }
@@ -59,17 +66,19 @@ export async function getPlayersWithStatus(
 
     if (!results || results.length === 0) break
     allPlayerIds.push(...results.map((r) => r.player_id))
-    if (results.length < PAGE) break
-    from += PAGE
+    if (results.length < FETCH_PAGE) break
+    fromRow += FETCH_PAGE
   }
 
   const participantIds = [...new Set(allPlayerIds)]
 
   if (participantIds.length === 0) {
-    return []
+    return { players: [], total: 0 }
   }
 
   // Fetch those players with their Elon status for this semester
+  // We need to get all matching players first for accurate Elon filtering,
+  // then apply search + Elon filter + pagination in memory.
   const { data, error } = await supabase
     .from('players')
     .select(`
@@ -81,13 +90,14 @@ export async function getPlayersWithStatus(
     .in('id', participantIds)
     .eq('player_semester_status.semester_id', semesterId)
     .order('gamer_tag')
+    .limit(10000)
 
   if (error) {
     return { error: error.message }
   }
 
   // Flatten the join: extract is_elon_student from the nested array
-  const players = (data ?? []).map((row) => {
+  let players = (data ?? []).map((row) => {
     const statusArray = row.player_semester_status as
       | { is_elon_student: boolean }[]
       | null
@@ -104,7 +114,24 @@ export async function getPlayersWithStatus(
     }
   })
 
-  return players
+  // Apply search filter
+  if (search && search.trim()) {
+    const lower = search.trim().toLowerCase()
+    players = players.filter(p => p.gamer_tag.toLowerCase().includes(lower))
+  }
+
+  // Apply Elon filter
+  if (elonFilter === 'elon') {
+    players = players.filter(p => p.is_elon_student)
+  } else if (elonFilter === 'non-elon') {
+    players = players.filter(p => !p.is_elon_student)
+  }
+
+  const total = players.length
+  const start = page * pageSize
+  const paged = players.slice(start, start + pageSize)
+
+  return { players: paged, total }
 }
 
 export async function getAllPlayersPaginated(

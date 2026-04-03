@@ -19,10 +19,12 @@ export default async function PlayersPage() {
   }
 
   let initialPlayers: PlayerWithStatus[] = []
+  let initialTotal = 0
   if (initialSemesterId) {
     const playersResult = await getPlayersWithStatus(initialSemesterId)
     if (!('error' in playersResult)) {
-      initialPlayers = playersResult
+      initialPlayers = playersResult.players
+      initialTotal = playersResult.total
     }
   }
 
@@ -31,6 +33,7 @@ export default async function PlayersPage() {
       initialSemesters={semesters}
       initialSemesterId={initialSemesterId}
       initialPlayers={initialPlayers}
+      initialTotal={initialTotal}
     />
   )
 }
