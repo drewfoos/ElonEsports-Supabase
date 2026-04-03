@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { createClient } from '@/lib/supabase/server'
 import { createStaticClient } from '@/lib/supabase/static'
 import { unstable_cache } from 'next/cache'
 import type { Semester, LeaderboardEntry } from '@/lib/types'
@@ -69,19 +68,14 @@ const getLeaderboardData = unstable_cache(
 )
 
 export default async function LeaderboardPage() {
-  // Auth check must stay dynamic (uses cookies), run in parallel with cached data
-  const [{ semesters, initialSemesterId, initialEntries, fetchedAt }, sessionResult] =
-    await Promise.all([
-      getLeaderboardData(),
-      createClient().then((c) => c.auth.getUser()),
-    ])
+  const { semesters, initialSemesterId, initialEntries, fetchedAt } =
+    await getLeaderboardData()
 
   return (
     <LeaderboardClient
       semesters={semesters}
       initialSemesterId={initialSemesterId}
       initialEntries={initialEntries}
-      isLoggedIn={!!sessionResult.data?.user}
       fetchedAt={fetchedAt}
     />
   )

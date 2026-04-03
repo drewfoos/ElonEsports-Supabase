@@ -4,6 +4,52 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v0.12.0 — Shared Navigation, Security Headers, Login Redesign & UI Polish
+
+### Shared Components
+- **SiteHeader** — unified client component used on all public pages (home, players, about, FAQ); checks auth via `getUser()` and shows Login/Admin button; replaced 4 inline headers
+- **SiteFooter** — shared footer with nav links, social icons (Discord, Twitch, Instagram, YouTube, X, TikTok), GitHub link, and disclaimer
+- Player profile now uses SiteHeader with a breadcrumb (`Players > Tag`) below it
+
+### Security
+- **Security headers** in `next.config.ts`: X-Frame-Options (DENY), X-Content-Type-Options, Referrer-Policy, HSTS (2yr + preload), Permissions-Policy, Content-Security-Policy (self + Supabase connect-src)
+- **SiteHeader auth** switched from `getSession()` (local storage, spoofable) to `getUser()` (server-validated)
+- Homepage no longer fetches auth server-side (removed `createClient` from page.tsx), improving cacheability
+
+### Login Page Redesign
+- Dark theme matching site aesthetic (`bg-[#030303]`)
+- Shield icon + "Admin Sign In" header
+- Info box: "This login is for tournament organizers only. Player accounts are not required to view rankings or profiles."
+- Styled error state with red alert box
+- Loading spinner on submit
+- "Back to rankings" link, "Contact the current club captain for admin access" footer
+- Fade-slide-up entrance animation
+
+### About Page
+- "Connect With Us" social section with 6 branded cards (Discord, Twitch, Instagram, YouTube, X, TikTok)
+- Hover effects: icon scale + border/bg brighten
+
+### FAQ Page
+- Nav updated to match shared SiteHeader
+
+### Player Profile
+- **Tournament history** — show first 10 rows with "Show all X tournaments" expand button (matches h2h pattern)
+- **Head-to-head sorting** — all columns clickable to sort (opponent, wins, losses, total, win rate); click toggles asc/desc; active column shows chevron direction
+- **Semester cards** — replaced "Avg Score" (not meaningful) with "Top X% Percentile" computed from rank/total_ranked
+- **Memoized h2h sort** — `useMemo` on sort + visible slice to avoid re-sorting on every render
+- Consistent SiteHeader with breadcrumb navigation
+
+### Navigation Consistency
+- Removed redundant "Rankings" nav link (logo links home)
+- Login/Admin button styled consistently (same `bg-white/[0.1]` treatment whether signed in or out)
+- All public pages show: Players, About (desktop), FAQ (desktop), Login/Admin
+
+### New Files
+- `src/components/site-header.tsx` — Shared auth-aware navigation header
+- `src/components/site-footer.tsx` — Shared footer with socials
+
+---
+
 ## v0.11.0 — Branding, SEO, Pagination & Character Art
 
 ### Favicon & Branding

@@ -28,7 +28,7 @@ const steps: Step[] = [
   {
     icon: Upload,
     title: 'Import a Tournament',
-    intro: 'Pull in results directly from start.gg — or build them manually.',
+    intro: 'Pull in results directly from start.gg or build them manually.',
     points: [
       {
         label: 'Paste a URL',
@@ -62,7 +62,7 @@ const steps: Step[] = [
       {
         label: 'Elon status',
         detail:
-          'Toggle per semester — only Elon students affect the rankings.',
+          'Toggle per semester. Only Elon students affect the rankings.',
       },
       {
         label: 'Merge duplicates',
@@ -110,7 +110,7 @@ const steps: Step[] = [
       {
         label: 'Weighted scoring',
         detail:
-          'Tournaments with more non-Elon players count less — rewards performing against tougher competition.',
+          'Tournaments with more non-Elon players count less. Rewards performing against tougher competition.',
       },
       {
         label: 'Minimum 3 tournaments',

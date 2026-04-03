@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import {
   Table,
@@ -15,9 +15,10 @@ import {
   Trophy,
   Medal,
   Swords,
-  ArrowLeft,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
+  ArrowUpDown,
   Gamepad2,
   Calendar,
   Target,
@@ -26,6 +27,8 @@ import {
   History,
 } from 'lucide-react'
 import { LastUpdated } from '@/components/last-updated'
+import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
 import { PlayerJourney } from './player-journey'
 import { PlacementTimeline } from './placement-timeline'
 import { PerformanceSignal } from './performance-signal'
@@ -41,34 +44,15 @@ export function ProfileClient({ profile, fetchedAt }: { profile: PlayerProfile; 
 
   return (
     <div className="flex min-h-screen flex-col bg-[#030303]">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#030303]/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <nav className="flex items-center gap-2 text-xs text-white/40">
-            <Link
-              href="/"
-              className="flex items-center gap-1 transition-colors hover:text-white/70"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Rankings
-            </Link>
-            <span className="text-white/10">/</span>
-            <Link
-              href="/players"
-              className="transition-colors hover:text-white/70"
-            >
-              Players
-            </Link>
-            <span className="text-white/10">/</span>
-            <span className="max-w-[120px] truncate font-medium text-white">{player.gamer_tag}</span>
-          </nav>
-          <Badge className="hidden border-0 bg-white/[0.06] text-[10px] uppercase tracking-wider text-white/40 sm:inline-flex">
-            Player Profile
-          </Badge>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
+        {/* Breadcrumb */}
+        <nav className="mb-6 flex items-center gap-1.5 text-xs text-white/40">
+          <Link href="/players" className="transition-colors hover:text-white/70">Players</Link>
+          <ChevronRight className="h-3 w-3" />
+          <span className="max-w-[200px] truncate text-white/70">{player.gamer_tag}</span>
+        </nav>
         {/* Player hero */}
         <div className="relative mb-10 overflow-hidden rounded-2xl border border-white/[0.06]">
           {/* Atmospheric background layers */}
@@ -202,11 +186,11 @@ export function ProfileClient({ profile, fetchedAt }: { profile: PlayerProfile; 
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <div className="rounded-lg bg-white/[0.04] px-3 py-2">
-                      <span className="block font-mono text-sm font-bold text-white/80">
-                        {s.average_score.toFixed(3)}
+                      <span className="block text-sm font-bold text-white/80">
+                        Top {s.total_ranked > 0 ? Math.round((s.rank / s.total_ranked) * 100) : 0}%
                       </span>
                       <span className="text-[10px] uppercase tracking-wider text-white/25">
-                        Avg Score
+                        Percentile
                       </span>
                     </div>
                     <div className="rounded-lg bg-white/[0.04] px-3 py-2">
@@ -238,13 +222,7 @@ export function ProfileClient({ profile, fetchedAt }: { profile: PlayerProfile; 
 
       </main>
 
-      <footer className="border-t border-white/[0.06] py-6">
-        <p className="text-center text-xs text-white/20">
-          Elon University Esports Club
-          <br />
-          <span className="text-white/10">Not affiliated with Nintendo</span>
-        </p>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }
@@ -372,24 +350,53 @@ function StatCard({
 // Head-to-head table
 // ---------------------------------------------------------------------------
 
+type H2HSortKey = 'opponent' | 'wins' | 'losses' | 'total' | 'winrate'
+
 function HeadToHeadTable({
   records,
 }: {
   records: PlayerProfile['headToHead']
 }) {
   const [expanded, setExpanded] = useState(false)
-  const visible = expanded ? records : records.slice(0, 10)
+  const [sortKey, setSortKey] = useState<H2HSortKey>('winrate')
+  const [sortAsc, setSortAsc] = useState(false)
+
+  const handleSort = (key: H2HSortKey) => {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc)
+    } else {
+      setSortKey(key)
+      setSortAsc(key === 'opponent') // default asc for name, desc for numbers
+    }
+  }
+
+  const sorted = useMemo(() => [...records].sort((a, b) => {
+    const dir = sortAsc ? 1 : -1
+    const totalA = a.wins + a.losses
+    const totalB = b.wins + b.losses
+    const pctA = totalA > 0 ? a.wins / totalA : 0
+    const pctB = totalB > 0 ? b.wins / totalB : 0
+    switch (sortKey) {
+      case 'opponent': return dir * a.opponent_tag.localeCompare(b.opponent_tag)
+      case 'wins': return dir * (a.wins - b.wins)
+      case 'losses': return dir * (a.losses - b.losses)
+      case 'total': return dir * (totalA - totalB)
+      case 'winrate': return dir * (pctA - pctB)
+    }
+  }), [records, sortKey, sortAsc])
+
+  const visible = useMemo(() => expanded ? sorted : sorted.slice(0, 10), [sorted, expanded])
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
       <Table>
         <TableHeader>
           <TableRow className="border-white/[0.06] hover:bg-transparent">
-            <TableHead className="text-white/30">Opponent</TableHead>
-            <TableHead className="text-center text-white/30">Wins</TableHead>
-            <TableHead className="text-center text-white/30">Losses</TableHead>
-            <TableHead className="hidden text-center text-white/30 sm:table-cell">Total</TableHead>
-            <TableHead className="text-right text-white/30">Win Rate</TableHead>
+            <SortableHead label="Opponent" sortKey="opponent" currentKey={sortKey} asc={sortAsc} onSort={handleSort} />
+            <SortableHead label="Wins" sortKey="wins" currentKey={sortKey} asc={sortAsc} onSort={handleSort} center />
+            <SortableHead label="Losses" sortKey="losses" currentKey={sortKey} asc={sortAsc} onSort={handleSort} center />
+            <SortableHead label="Total" sortKey="total" currentKey={sortKey} asc={sortAsc} onSort={handleSort} center className="hidden sm:table-cell" />
+            <SortableHead label="Win Rate" sortKey="winrate" currentKey={sortKey} asc={sortAsc} onSort={handleSort} right />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -437,6 +444,44 @@ function HeadToHeadTable({
   )
 }
 
+function SortableHead({
+  label,
+  sortKey,
+  currentKey,
+  asc,
+  onSort,
+  center,
+  right,
+  className,
+}: {
+  label: string
+  sortKey: H2HSortKey
+  currentKey: H2HSortKey
+  asc: boolean
+  onSort: (key: H2HSortKey) => void
+  center?: boolean
+  right?: boolean
+  className?: string
+}) {
+  const active = currentKey === sortKey
+  const align = right ? 'text-right' : center ? 'text-center' : ''
+  return (
+    <TableHead className={`${align} ${className ?? ''}`}>
+      <button
+        onClick={() => onSort(sortKey)}
+        className={`inline-flex items-center gap-1 text-white/30 transition-colors hover:text-white/60 ${center ? 'mx-auto' : ''} ${right ? 'ml-auto' : ''}`}
+      >
+        {label}
+        {active ? (
+          <ChevronUp className={`h-3 w-3 transition-transform ${asc ? '' : 'rotate-180'}`} />
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100" />
+        )}
+      </button>
+    </TableHead>
+  )
+}
+
 function WinBar({ pct }: { pct: number }) {
   return (
     <div className="flex items-center justify-end gap-2.5">
@@ -460,6 +505,9 @@ function TournamentHistoryTable({
 }: {
   results: PlayerProfile['tournamentResults']
 }) {
+  const [expanded, setExpanded] = useState(false)
+  const visible = expanded ? results : results.slice(0, 10)
+
   return (
     <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
       <Table>
@@ -478,7 +526,7 @@ function TournamentHistoryTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {results.map((r, i) => (
+          {visible.map((r, i) => (
             <TableRow
               key={r.tournament_id}
               className="border-white/[0.04] hover:bg-white/[0.03]"
@@ -521,6 +569,22 @@ function TournamentHistoryTable({
           ))}
         </TableBody>
       </Table>
+      {results.length > 10 && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex w-full cursor-pointer items-center justify-center gap-1.5 border-t border-white/[0.06] py-2.5 text-xs font-medium text-white/30 transition-colors hover:bg-white/[0.03] hover:text-white/60"
+        >
+          {expanded ? (
+            <>
+              Show less <ChevronUp className="h-3.5 w-3.5" />
+            </>
+          ) : (
+            <>
+              Show all {results.length} tournaments <ChevronDown className="h-3.5 w-3.5" />
+            </>
+          )}
+        </button>
+      )}
     </div>
   )
 }

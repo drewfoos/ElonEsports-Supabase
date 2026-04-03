@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import {
   Select,
   SelectContent,
@@ -18,10 +17,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
 import { HeroGeometric } from '@/components/ui/shape-landing-hero'
 import { Trophy, Medal } from 'lucide-react'
 import { LastUpdated } from '@/components/last-updated'
+import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
 import type { Semester, LeaderboardEntry } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
@@ -181,13 +181,11 @@ export function LeaderboardClient({
   semesters,
   initialSemesterId,
   initialEntries,
-  isLoggedIn,
   fetchedAt,
 }: {
   semesters: Semester[]
   initialSemesterId: string
   initialEntries: LeaderboardEntry[]
-  isLoggedIn: boolean
   fetchedAt: number
 }) {
   const [selectedSemesterId, setSelectedSemesterId] = useState(initialSemesterId)
@@ -251,37 +249,7 @@ export function LeaderboardClient({
 
   return (
     <div className="flex min-h-screen flex-col bg-[#030303]">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#030303]/90 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Image src="/icon.svg" alt="" width={32} height={32} className="h-8 w-8" />
-            <span className="text-lg font-bold tracking-tight text-white">
-              Elon Esports
-            </span>
-            <Badge className="border-0 bg-white/[0.06] text-[10px] uppercase tracking-wider text-white/50">
-              Smash PR
-            </Badge>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Link
-              href="/players"
-              className="text-xs font-medium text-white/40 transition-colors hover:text-white/70"
-            >
-              Players
-            </Link>
-            <a
-              href={isLoggedIn ? '/admin' : '/login'}
-              className={isLoggedIn
-                ? "inline-flex items-center rounded-md bg-white/[0.1] px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/[0.15]"
-                : "text-xs text-white/40 transition-colors hover:text-white/70"
-              }
-            >
-              {isLoggedIn ? 'Admin' : 'Login'}
-            </a>
-          </div>
-        </div>
-      </header>
+      <SiteHeader />
 
       {/* Hero */}
       <HeroGeometric
@@ -457,14 +425,7 @@ export function LeaderboardClient({
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-white/[0.06] py-6">
-        <p className="text-center text-xs text-white/20">
-          Elon University Esports Club
-          <br />
-          <span className="text-white/10">Not affiliated with Nintendo</span>
-        </p>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }

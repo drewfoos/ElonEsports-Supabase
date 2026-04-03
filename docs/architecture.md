@@ -203,7 +203,8 @@ Admin → POST mergePlayers(keepId, mergeId)
 - **Players directory** — queries filtered by Elon player IDs (fetches IDs first, then filters `tournament_results` and `sets` by those IDs instead of scanning entire tables); cached with `players-list` tag and 60s TTL; client-side pagination (50/page)
 - **Player profile** — 3 parallel DB batches (down from 4 sequential); `totalSets`, `totalWins`, `winPct` and reversed arrays computed server-side (no client recomputation); cached with `player-profile` tag
 - **SVG visualizations** — Performance Signal (waveform bars), Placement Timeline (cubic spline line chart), Player Journey (milestone timeline); all pure SVG, no charting library
-- **Head-to-head** — expandable table (first 10 shown, rest on demand); win-rate bars rendered inline
+- **Head-to-head** — expandable table (first 10 shown, rest on demand); sortable columns (opponent, wins, losses, total, win rate) with memoized sort; win-rate bars rendered inline
+- **Tournament history** — expandable table (first 10 shown, rest on demand); links to start.gg when available
 
 ## Idempotency
 
@@ -288,8 +289,12 @@ src/
 │   │       ├── performance-signal.tsx # Waveform bar chart (percentile per tournament)
 │   │       ├── placement-timeline.tsx # Line chart (percentile progression over time)
 │   │       └── player-journey.tsx     # Spotify Wrapped-style career milestones
+│   ├── about/
+│   │   └── page.tsx               # About page (scoring, features, socials)
+│   ├── faq/
+│   │   └── page.tsx               # FAQ accordion (14 questions)
 │   ├── login/
-│   │   └── page.tsx               # Admin login (email/password)
+│   │   └── page.tsx               # Admin login (redesigned, admin-only messaging)
 │   ├── admin/
 │   │   ├── layout.tsx             # Admin layout with sidebar nav
 │   │   ├── admin-nav.tsx          # Sidebar navigation (client component)
@@ -324,6 +329,8 @@ src/
 │       ├── semesters.ts           # Semester server actions
 │       └── refresh-cache.ts       # Cache refresh with rate limiting
 ├── components/
+│   ├── site-header.tsx            # Shared auth-aware navigation header
+│   ├── site-footer.tsx            # Shared footer with socials
 │   └── ui/
 │       ├── shape-landing-hero.tsx  # Animated geometric hero (LazyMotion)
 │       ├── last-updated.tsx        # Cache refresh button with cooldown timer
@@ -348,3 +355,11 @@ The static client exists because `unstable_cache` requires deterministic inputs 
 - **RLS**: Public read on leaderboard data, all mutations use service role client (bypasses RLS)
 - **Input validation**: All server actions validate inputs (trimming, empty checks, date ranges, placement ranges)
 - **Supabase config**: Email signups disabled, rate limits configured, no public registration
+- **HTTP security headers** (via `next.config.ts`):
+  - `X-Frame-Options: DENY` — prevents clickjacking
+  - `X-Content-Type-Options: nosniff` — blocks MIME sniffing
+  - `Referrer-Policy: strict-origin-when-cross-origin` — limits referrer leakage
+  - `Strict-Transport-Security` — enforces HTTPS (2-year max-age, preload)
+  - `Permissions-Policy` — disables camera, mic, geolocation, FLoC
+  - `Content-Security-Policy` — scripts self-only, connect-src restricted to self + Supabase, frame-ancestors none
+- **SiteHeader auth** — uses `getUser()` (server-validated) not `getSession()` (local storage); admin routes additionally protected server-side in layout via email allowlist

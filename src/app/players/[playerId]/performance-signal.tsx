@@ -392,7 +392,7 @@ function SigTip({ b }: { b: Bar }) {
         fillOpacity={0.4}
         className="text-[10px] font-mono"
       >
-        {ordinal(b.result.placement)} / {b.result.total_participants} — {pctLabel}
+        {ordinal(b.result.placement)} / {b.result.total_participants}, {pctLabel}
       </text>
       <text
         x={tx + 10}

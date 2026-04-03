@@ -224,7 +224,7 @@ export function PlacementTimeline({
                   {ordinal(p.placement)}
                 </text>
 
-                <title>{`${p.tournament_name} (${fmtDate(p.tournament_date)})\n${ordinal(p.placement)} / ${p.total_participants} — ${((1 - p.pct) * 100).toFixed(0)}th percentile`}</title>
+                <title>{`${p.tournament_name} (${fmtDate(p.tournament_date)})\n${ordinal(p.placement)} / ${p.total_participants}, ${((1 - p.pct) * 100).toFixed(0)}th percentile`}</title>
               </g>
             )
           })}

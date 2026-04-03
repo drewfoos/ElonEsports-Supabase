@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import {
   Table,
   TableBody,
@@ -15,7 +14,6 @@ import { Badge } from '@/components/ui/badge'
 import { HeroGeometric } from '@/components/ui/shape-landing-hero'
 import {
   Search,
-  ArrowLeft,
   Swords,
   Trophy,
   Medal,
@@ -25,6 +23,8 @@ import {
   UserSearch,
 } from 'lucide-react'
 import { LastUpdated } from '@/components/last-updated'
+import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
 import { PlayerScatter } from './player-scatter'
 import type { PlayerListItem } from './page'
 
@@ -57,27 +57,7 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
 
   return (
     <div className="flex min-h-screen flex-col bg-[#030303]">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#030303]/90 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight text-white transition-colors hover:text-white/80">
-              <Image src="/icon.svg" alt="" width={32} height={32} className="h-8 w-8" />
-              Elon Esports
-            </Link>
-            <Badge className="border-0 bg-white/[0.06] text-[10px] uppercase tracking-wider text-white/50">
-              Smash PR
-            </Badge>
-          </div>
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 text-xs text-white/40 transition-colors hover:text-white/70"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Rankings
-          </Link>
-        </div>
-      </header>
+      <SiteHeader />
 
       {/* Hero */}
       <HeroGeometric
@@ -290,13 +270,7 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
         )}
       </main>
 
-      <footer className="border-t border-white/[0.06] py-6">
-        <p className="text-center text-xs text-white/20">
-          Elon University Esports Club
-          <br />
-          <span className="text-white/10">Not affiliated with Nintendo</span>
-        </p>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }
