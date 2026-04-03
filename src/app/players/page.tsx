@@ -36,7 +36,8 @@ const getPlayersData = unstable_cache(
     }
 
     // 2. Fetch only Elon players' results and sets in parallel
-    const [resultsRes, winsRes, lossesRes] = await Promise.all([
+    // Sets query fetches both columns in one call (halves response payload)
+    const [resultsRes, setsRes] = await Promise.all([
       supabase
         .from('tournament_results')
         .select('player_id, placement')
@@ -44,19 +45,13 @@ const getPlayersData = unstable_cache(
         .limit(10000),
       supabase
         .from('sets')
-        .select('winner_player_id')
-        .in('winner_player_id', elonIds)
-        .limit(10000),
-      supabase
-        .from('sets')
-        .select('loser_player_id')
-        .in('loser_player_id', elonIds)
+        .select('winner_player_id, loser_player_id')
+        .or(`winner_player_id.in.(${elonIds.join(',')}),loser_player_id.in.(${elonIds.join(',')})`)
         .limit(10000),
     ])
 
     const results = resultsRes.data ?? []
-    const wins = winsRes.data ?? []
-    const losses = lossesRes.data ?? []
+    const sets = setsRes.data ?? []
 
     // Best placement + tournament count per player (single pass)
     const bestPlacement: Record<string, number> = {}
@@ -68,16 +63,15 @@ const getPlayersData = unstable_cache(
       resultCount[r.player_id] = (resultCount[r.player_id] ?? 0) + 1
     }
 
-    // Set records
+    // Set records (single pass over one array instead of two)
     const setWins: Record<string, number> = {}
     const setLosses: Record<string, number> = {}
-    for (const w of wins) {
-      const id = w.winner_player_id as string
-      if (id) setWins[id] = (setWins[id] ?? 0) + 1
-    }
-    for (const l of losses) {
-      const id = l.loser_player_id as string
-      if (id) setLosses[id] = (setLosses[id] ?? 0) + 1
+    const elonIdSet = new Set(elonIds)
+    for (const s of sets) {
+      const w = s.winner_player_id as string
+      const l = s.loser_player_id as string
+      if (w && elonIdSet.has(w)) setWins[w] = (setWins[w] ?? 0) + 1
+      if (l && elonIdSet.has(l)) setLosses[l] = (setLosses[l] ?? 0) + 1
     }
 
     // Assemble player list
