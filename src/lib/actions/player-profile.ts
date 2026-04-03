@@ -231,8 +231,9 @@ export async function getPlayerProfile(
       ? semesterScores[semesterScores.length - 1].rank
       : null
 
-  const totalSets = headToHead.reduce((sum, h) => sum + h.wins + h.losses, 0)
-  const totalWins = headToHead.reduce((sum, h) => sum + h.wins, 0)
+  // Count from raw query results (not h2h) so sets with null opponents are included
+  const totalWins = (winsRes.data ?? []).length
+  const totalSets = totalWins + (lossesRes.data ?? []).length
   const winPct = totalSets > 0 ? ((totalWins / totalSets) * 100).toFixed(0) : null
 
   return {
