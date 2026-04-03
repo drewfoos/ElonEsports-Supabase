@@ -4,6 +4,22 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v1.0.0 — Release
+
+### SEO & Crawling
+- **robots.txt** (via `src/app/robots.ts`) — allows all public pages, disallows `/admin`, `/login`, `/api/`; links to sitemap
+- **sitemap.xml** (via `src/app/sitemap.ts`) — static pages (home, players, about, FAQ) + dynamic player profile pages (queries Elon students from DB)
+- **noindex on admin** — `robots: { index: false, follow: false }` on admin layout and login layout
+- **Login page metadata** — "Admin Login" title via `login/layout.tsx`
+- All public pages already had SEO metadata from v0.11.0 (home, players, about, FAQ, player profiles with dynamic `generateMetadata`)
+
+### New Files
+- `src/app/robots.ts` — Dynamic robots.txt generation
+- `src/app/sitemap.ts` — Dynamic sitemap with player profiles
+- `src/app/login/layout.tsx` — Login metadata (noindex, title)
+
+---
+
 ## v0.12.0 — Shared Navigation, Security Headers, Login Redesign & UI Polish
 
 ### Shared Components
