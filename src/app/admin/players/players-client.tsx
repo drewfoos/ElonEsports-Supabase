@@ -611,20 +611,20 @@ export default function PlayersClient({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Players</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Players</h1>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={openMergeDialog}>
+          <Button variant="outline" size="sm" onClick={openMergeDialog}>
             Merge Players
           </Button>
-          <Button onClick={() => setAddOpen(true)}>Add Player</Button>
+          <Button size="sm" onClick={() => setAddOpen(true)}>Add Player</Button>
         </div>
       </div>
 
-      {/* Tab switcher + Elon filter */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1 rounded-lg bg-muted p-1 w-fit">
+      {/* Toolbar: tabs + filter */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2">
+        <div className="flex items-center gap-1 rounded-md bg-background p-0.5 ring-1 ring-border/50">
           <TabButton active={tab === 'semester'} onClick={() => setTab('semester')}>
             By Semester
           </TabButton>
@@ -633,9 +633,9 @@ export default function PlayersClient({
           </TabButton>
         </div>
         <div className="flex items-center gap-2">
-          <Label className="text-sm text-muted-foreground">Status</Label>
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Elon Affiliation</span>
           <Select value={elonFilter} onValueChange={(v) => { if (v) setElonFilter(v as ElonFilter) }}>
-            <SelectTrigger className="w-[140px]">
+            <SelectTrigger className="h-8 w-[130px] text-xs">
               <SelectValue>
                 {elonFilter === 'elon' ? 'Elon Only' : elonFilter === 'non-elon' ? 'Non-Elon' : 'All Players'}
               </SelectValue>
@@ -871,69 +871,111 @@ export default function PlayersClient({
           setMergeSearch('')
         }
       }}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Merge Players</DialogTitle>
+        <DialogContent className="flex max-h-[92vh] w-full max-w-4xl flex-col gap-0 p-0 sm:max-w-4xl">
+          {/* Header */}
+          <div className="space-y-1 border-b px-6 pt-6 pb-4">
+            <DialogTitle className="text-lg">Merge Players</DialogTitle>
             <DialogDescription>
-              Merge Player B into Player A. All tournament results from B will be
-              transferred to A. If both have results in the same tournament, the
-              better placement is kept. Player B will be deleted.
+              Select two players below. All tournament results from Player B transfer to Player A.
+              Duplicate tournament entries keep the better placement. Player B is deleted after merge.
             </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4 sm:grid-cols-2">
+          </div>
+
+          {/* Merge flow visualization */}
+          {mergeKeepId && mergeMergeId && (() => {
+            const keepPlayer = allPlayers.find(p => p.id === mergeKeepId)
+            const mergePlayer = allPlayers.find(p => p.id === mergeMergeId)
+            if (!keepPlayer || !mergePlayer) return null
+            return (
+              <div className="border-b bg-muted/20 px-6 py-4">
+                <div className="flex items-center justify-center gap-4 text-sm">
+                  <div className="rounded-lg border bg-background px-4 py-2.5 text-center shadow-sm">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Keep</div>
+                    <div className="font-semibold text-foreground">{keepPlayer.gamer_tag}</div>
+                    <div className="text-xs text-muted-foreground">{keepPlayer.tournament_count} tournaments</div>
+                  </div>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <svg className="h-5 w-5 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                    </svg>
+                    <span className="text-[10px] text-muted-foreground">merge into</span>
+                  </div>
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/[0.03] px-4 py-2.5 text-center shadow-sm">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-destructive/70">Delete</div>
+                    <div className="font-semibold text-foreground">{mergePlayer.gamer_tag}</div>
+                    <div className="text-xs text-muted-foreground">{mergePlayer.tournament_count} tournaments</div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Two-panel selection */}
+          <div className="grid min-h-0 flex-1 gap-0 overflow-hidden sm:grid-cols-2">
             {/* Player A (keep) */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Player A (keep)</Label>
+            <div className="flex flex-col border-b sm:border-b-0 sm:border-r">
+              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">A</div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Player to keep</span>
+                </div>
+                {mergeKeepId && (
+                  <button
+                    type="button"
+                    onClick={() => { setMergeKeepId(''); setKeepSearch('') }}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
               {mergeKeepId ? (() => {
                 const p = allPlayers.find(p => p.id === mergeKeepId)
                 if (!p) return null
                 return (
-                  <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{p.gamer_tag}</span>
-                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => { setMergeKeepId(''); setKeepSearch('') }}>
-                        Change
-                      </Button>
-                    </div>
-                    <span className="text-muted-foreground text-xs">
-                      {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
-                    </span>
-                    {p.startgg_player_ids.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {p.startgg_player_ids.map(id => (
-                          <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
-                        ))}
+                  <div className="flex flex-1 items-center justify-center p-6">
+                    <div className="text-center">
+                      <div className="mb-1 text-lg font-semibold">{p.gamer_tag}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
                       </div>
-                    )}
+                      {p.startgg_player_ids.length > 0 && (
+                        <div className="mt-2 flex flex-wrap justify-center gap-1">
+                          {p.startgg_player_ids.map(id => (
+                            <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               })() : (
-                <Command className="rounded-md border" shouldFilter={false}>
+                <Command className="flex-1 border-0" shouldFilter={false}>
                   <CommandInput
                     placeholder="Search players..."
                     value={keepSearch}
                     onValueChange={setKeepSearch}
                   />
-                  <CommandList className="max-h-64">
+                  <CommandList className="styled-scroll !max-h-[50vh] !overflow-y-auto [scrollbar-width:thin!important]">
                     <CommandEmpty>No players found.</CommandEmpty>
                     <CommandGroup>
                       {filteredKeepPlayers.map(p => (
-                          <CommandItem
-                            key={p.id}
-                            value={p.id}
-                            onSelect={() => setMergeKeepId(p.id)}
-                          >
-                            <div className="flex flex-col">
-                              <span className="font-medium">{p.gamer_tag}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
-                                {p.startgg_player_ids.length > 0 && (
-                                  <> · {p.startgg_player_ids.join(', ')}</>
-                                )}
-                              </span>
-                            </div>
-                          </CommandItem>
-                        ))}
+                        <CommandItem
+                          key={p.id}
+                          value={p.id}
+                          onSelect={() => setMergeKeepId(p.id)}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-medium">{p.gamer_tag}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
+                              {p.startgg_player_ids.length > 0 && (
+                                <> · {p.startgg_player_ids.join(', ')}</>
+                              )}
+                            </span>
+                          </div>
+                        </CommandItem>
+                      ))}
                     </CommandGroup>
                   </CommandList>
                 </Command>
@@ -941,73 +983,88 @@ export default function PlayersClient({
             </div>
 
             {/* Player B (merge & delete) */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Player B (merge &amp; delete)</Label>
+            <div className="flex flex-col">
+              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">B</div>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Player to merge &amp; delete</span>
+                </div>
+                {mergeMergeId && (
+                  <button
+                    type="button"
+                    onClick={() => { setMergeMergeId(''); setMergeSearch('') }}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
               {mergeMergeId ? (() => {
                 const p = allPlayers.find(p => p.id === mergeMergeId)
                 if (!p) return null
                 return (
-                  <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{p.gamer_tag}</span>
-                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => { setMergeMergeId(''); setMergeSearch('') }}>
-                        Change
-                      </Button>
-                    </div>
-                    <span className="text-muted-foreground text-xs">
-                      {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
-                    </span>
-                    {p.startgg_player_ids.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {p.startgg_player_ids.map(id => (
-                          <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
-                        ))}
+                  <div className="flex flex-1 items-center justify-center p-6">
+                    <div className="text-center">
+                      <div className="mb-1 text-lg font-semibold">{p.gamer_tag}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
                       </div>
-                    )}
+                      {p.startgg_player_ids.length > 0 && (
+                        <div className="mt-2 flex flex-wrap justify-center gap-1">
+                          {p.startgg_player_ids.map(id => (
+                            <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               })() : (
-                <Command className="rounded-md border" shouldFilter={false}>
+                <Command className="flex-1 border-0" shouldFilter={false}>
                   <CommandInput
                     placeholder="Search players..."
                     value={mergeSearch}
                     onValueChange={setMergeSearch}
                   />
-                  <CommandList className="max-h-64">
+                  <CommandList className="styled-scroll !max-h-[50vh] !overflow-y-auto [scrollbar-width:thin!important]">
                     <CommandEmpty>No players found.</CommandEmpty>
                     <CommandGroup>
                       {filteredMergePlayers.map(p => (
-                          <CommandItem
-                            key={p.id}
-                            value={p.id}
-                            onSelect={() => setMergeMergeId(p.id)}
-                          >
-                            <div className="flex flex-col">
-                              <span className="font-medium">{p.gamer_tag}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
-                                {p.startgg_player_ids.length > 0 && (
-                                  <> · {p.startgg_player_ids.join(', ')}</>
-                                )}
-                              </span>
-                            </div>
-                          </CommandItem>
-                        ))}
+                        <CommandItem
+                          key={p.id}
+                          value={p.id}
+                          onSelect={() => setMergeMergeId(p.id)}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-medium">{p.gamer_tag}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
+                              {p.startgg_player_ids.length > 0 && (
+                                <> · {p.startgg_player_ids.join(', ')}</>
+                              )}
+                            </span>
+                          </div>
+                        </CommandItem>
+                      ))}
                     </CommandGroup>
                   </CommandList>
                 </Command>
               )}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMergeOpen(false)}>Cancel</Button>
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-2 border-t bg-muted/30 px-6 py-3">
+            <Button variant="outline" size="sm" onClick={() => setMergeOpen(false)}>Cancel</Button>
             <Button
+              size="sm"
+              variant={mergeKeepId && mergeMergeId && mergeKeepId !== mergeMergeId ? 'destructive' : 'default'}
               onClick={handleMerge}
               disabled={mergeLoading || !mergeKeepId || !mergeMergeId || mergeKeepId === mergeMergeId}
             >
-              {mergeLoading ? 'Merging...' : 'Merge'}
+              {mergeLoading ? 'Merging...' : 'Merge Players'}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

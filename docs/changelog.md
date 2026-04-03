@@ -4,6 +4,38 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v0.10.3 — Admin UI Redesign & Scrollbar Polish
+
+### Import Tournament Dialog
+- Standings preview moved from inline to a full-width dialog (`max-w-3xl`, 92vh)
+- Rows are clickable to toggle Elon status (not just the switch)
+- Elon-flagged rows get a subtle primary tint
+- Search bar with icon, segmented filter buttons (All / Elon / Not Elon)
+- Uppercase column headers, summary + confirm in dialog footer
+- Confirm disabled when 0 Elon players selected
+
+### Merge Players Dialog
+- Expanded to `max-w-4xl` with side-by-side panels (Player A / Player B)
+- Each panel has labeled header with colored badge (A = primary, B = destructive)
+- Merge flow visualization appears when both players selected (Keep → merge into → Delete)
+- Command lists scroll properly with `!max-h-[50vh]` override
+- Merge button turns destructive when ready
+
+### Players Page
+- Toolbar consolidated into bordered bar with tab switcher + Elon Affiliation filter
+- Smaller action buttons, tighter spacing
+
+### Custom Scrollbars
+- `styled-scroll` CSS class: 6px thin rounded thumb, subtle gray, darkens on hover
+- Dark mode variant with lighter opacity
+- Applied to: import dialog, merge dialog, manual entry picker, tournament results sheet/list
+
+### Dashboard
+- Recent tournament names link to start.gg when `startgg_slug` is available (opens in new tab)
+- Manual tournaments remain plain text
+
+---
+
 ## v0.10.2 — Semester Date Range Fix & Delete
 
 ### Auto-Create Semesters

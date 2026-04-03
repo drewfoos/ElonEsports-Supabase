@@ -193,9 +193,20 @@ export default async function AdminDashboardPage() {
                   className="flex items-center justify-between text-sm"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-medium text-foreground truncate">
-                      {t.name}
-                    </span>
+                    {t.startgg_slug ? (
+                      <a
+                        href={`https://www.start.gg/${t.startgg_slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-foreground truncate underline-offset-2 hover:underline"
+                      >
+                        {t.name}
+                      </a>
+                    ) : (
+                      <span className="font-medium text-foreground truncate">
+                        {t.name}
+                      </span>
+                    )}
                     <Badge
                       variant={t.source === 'startgg' ? 'default' : 'secondary'}
                       className="shrink-0 text-[10px]"

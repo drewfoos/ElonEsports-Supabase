@@ -58,7 +58,7 @@ function ResultsVirtualList({ results }: { results: TournamentResultWithPlayer[]
         <div className="w-[70px] text-right">Score</div>
       </div>
       {/* Virtualized rows */}
-      <div ref={parentRef} className="max-h-[50vh] overflow-y-auto">
+      <div ref={parentRef} className="styled-scroll max-h-[50vh] overflow-y-auto">
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const r = results[virtualRow.index]
@@ -337,7 +337,7 @@ export default function TournamentsClient({
 
       {/* Tournament detail sheet */}
       <Sheet open={inspectTournament !== null} onOpenChange={(open) => { if (!open) setInspectTournament(null) }}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetContent className="styled-scroll w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{inspectTournament?.name}</SheetTitle>
             <SheetDescription>

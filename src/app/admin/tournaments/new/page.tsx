@@ -17,6 +17,14 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -205,7 +213,7 @@ const PlayerPicker = memo(function PlayerPicker({
           {filtered.length === 0 && (exactMatch || !onCreatePlayer) ? (
             <p className="py-4 text-center text-sm text-muted-foreground">No players found.</p>
           ) : filtered.length > 0 ? (
-            <div ref={listRef} className="max-h-[200px] overflow-auto">
+            <div ref={listRef} className="styled-scroll max-h-[200px] overflow-auto">
               <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
                 {virtualizer.getVirtualItems().map((virtualRow) => {
                   const p = filtered[virtualRow.index]
@@ -680,27 +688,31 @@ const StandingsPreview = memo(function StandingsPreview({
   })
 
   const allChecked = elonCount === standings.length
-  const someChecked = elonCount > 0 && !allChecked
 
   return (
-    <div className="rounded-md border">
-      {/* Search + filter bar */}
-      <div className="flex items-center gap-2 border-b px-3 py-2">
-        <input
-          className="flex h-8 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          placeholder="Search players..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <div className="flex gap-1 text-xs">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {/* Search + filter toolbar */}
+      <div className="flex items-center gap-3 border-b bg-muted/20 px-5 py-2.5">
+        <div className="relative flex-1">
+          <svg className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            className="flex h-8 w-full rounded-md bg-background pl-8 pr-3 text-sm outline-none ring-1 ring-border/50 placeholder:text-muted-foreground/50 focus:ring-primary/40"
+            placeholder="Search players..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="flex rounded-md ring-1 ring-border/50">
           {(['all', 'elon', 'non-elon'] as const).map((mode) => (
             <button
               key={mode}
               type="button"
-              className={`rounded px-2 py-1 transition-colors ${
+              className={`px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md ${
                 filterMode === mode
                   ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
               }`}
               onClick={() => setFilterMode(mode)}
             >
@@ -709,53 +721,64 @@ const StandingsPreview = memo(function StandingsPreview({
           ))}
         </div>
       </div>
-      {/* Header */}
-      <div className="flex items-center border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
-        <div className="w-[60px]">Place</div>
-        <div className="flex-1">Gamer Tag</div>
-        <div className="w-[80px] text-center">Match</div>
-        <div className="w-[80px] flex flex-col items-center gap-0.5">
+      {/* Column header */}
+      <div className="flex items-center border-b bg-muted/40 px-5 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+        <div className="w-14 text-center">#</div>
+        <div className="flex-1 pl-1">Player</div>
+        <div className="w-20 text-center">Status</div>
+        <div className="w-24 flex items-center justify-center gap-2">
           <span>Elon</span>
           <button
             type="button"
-            className="text-[10px] text-primary hover:underline"
+            className="rounded px-1.5 py-0.5 text-[10px] font-medium text-primary ring-1 ring-primary/30 transition-colors hover:bg-primary/10"
             onClick={() => onToggleAll(!allChecked)}
           >
-            {allChecked ? 'clear all' : someChecked ? 'select all' : 'select all'}
+            {allChecked ? 'Clear' : 'All'}
           </button>
         </div>
       </div>
       {/* Virtualized rows */}
-      <div ref={parentRef} className="max-h-[50vh] overflow-y-auto">
+      <div ref={parentRef} className="styled-scroll min-h-0 flex-1 overflow-y-auto">
         {filtered.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
+          <p className="py-10 text-center text-sm text-muted-foreground">
             No players match{search ? ` "${search}"` : ''}
           </p>
         ) : (
           <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const s = filtered[virtualRow.index]
+              const isElon = elonFlags[s.key] ?? false
               return (
                 <div
                   key={s.key}
-                  className="absolute left-0 flex w-full items-center border-b px-3 py-2 text-sm last:border-b-0"
+                  role="button"
+                  tabIndex={0}
+                  className={`absolute left-0 flex w-full cursor-pointer items-center px-5 text-sm transition-colors select-none ${
+                    isElon
+                      ? 'bg-primary/[0.04] hover:bg-primary/[0.08]'
+                      : 'hover:bg-muted/50'
+                  }`}
                   style={{
                     height: virtualRow.size,
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
+                  onClick={() => onToggleElon(s.key)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleElon(s.key) } }}
                 >
-                  <div className="w-[60px] font-mono text-muted-foreground">{s.placement}</div>
-                  <div className="flex-1 truncate font-medium">{s.gamerTag}</div>
-                  <div className="w-[80px] text-center">
+                  <div className="w-14 text-center font-mono text-xs text-muted-foreground">{s.placement}</div>
+                  <div className="flex flex-1 items-center gap-2 pl-1">
+                    <span className="truncate font-medium">{s.gamerTag}</span>
+                  </div>
+                  <div className="w-20 text-center">
                     {s.existingPlayerId ? (
-                      <Badge variant="secondary" className="text-xs">Existing</Badge>
+                      <Badge variant="secondary" className="text-[10px]">Existing</Badge>
                     ) : (
-                      <Badge variant="outline" className="text-xs">New</Badge>
+                      <Badge variant="outline" className="text-[10px]">New</Badge>
                     )}
                   </div>
-                  <div className="w-[80px] flex justify-center">
+                  <div className="w-24 flex justify-center" onClick={(e) => e.stopPropagation()}>
                     <Switch
-                      checked={elonFlags[s.key] ?? false}
+                      checked={isElon}
                       onCheckedChange={() => onToggleElon(s.key)}
                     />
                   </div>
@@ -764,14 +787,6 @@ const StandingsPreview = memo(function StandingsPreview({
             })}
           </div>
         )}
-      </div>
-      <div className="flex items-center justify-between border-t px-3 py-1.5 text-xs text-muted-foreground">
-        <span>
-          {filtered.length === standings.length
-            ? `${standings.length} participants`
-            : `${filtered.length} of ${standings.length} participants`}
-        </span>
-        <span className="font-medium">{elonCount} Elon</span>
       </div>
     </div>
   )
@@ -1013,39 +1028,58 @@ function StartggImportTab() {
         </div>
       )}
 
-      {/* Preview */}
-      {preview && (
-        <div className="space-y-4">
-          <div className="rounded-md border p-4">
-            <h3 className="text-lg font-semibold">{preview.tournamentName}</h3>
-            <div className="mt-1 flex flex-wrap gap-3 text-sm text-muted-foreground">
-              <span>{preview.tournamentDate}</span>
-              <span>{preview.eventName}</span>
-              <span>{preview.totalParticipants} participants</span>
+      {/* Preview Dialog */}
+      <Dialog open={preview !== null} onOpenChange={(open) => { if (!open) handleReset() }}>
+        <DialogContent className="flex max-h-[92vh] w-full max-w-3xl flex-col gap-0 p-0 sm:max-w-3xl">
+          {/* Header */}
+          <div className="space-y-3 border-b px-6 pt-6 pb-4">
+            <div>
+              <DialogTitle className="text-lg">{preview?.tournamentName}</DialogTitle>
+              <DialogDescription className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span>{preview?.tournamentDate}</span>
+                <span className="text-muted-foreground/40">|</span>
+                <span>{preview?.eventName}</span>
+                <span className="text-muted-foreground/40">|</span>
+                <span>{preview?.totalParticipants} participants</span>
+              </DialogDescription>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Toggle which players are Elon students. Click a row or use the switch.
+            </p>
+          </div>
+
+          {/* Standings list */}
+          {preview && (
+            <StandingsPreview
+              standings={preview.standings}
+              elonFlags={elonFlags}
+              elonCount={elonCount}
+              onToggleElon={toggleElonFlag}
+              onToggleAll={toggleAllElon}
+            />
+          )}
+
+          {/* Footer */}
+          <div className="flex items-center justify-between border-t bg-muted/30 px-6 py-3">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                {elonCount} Elon
+              </span>
+              <span className="text-xs text-muted-foreground">
+                of {preview?.standings.length ?? 0} participants
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleReset}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleConfirm} disabled={confirming || elonCount === 0}>
+                {confirming ? 'Importing...' : 'Confirm Import'}
+              </Button>
             </div>
           </div>
-
-          <StandingsPreview
-            standings={preview.standings}
-            elonFlags={elonFlags}
-            elonCount={elonCount}
-            onToggleElon={toggleElonFlag}
-            onToggleAll={toggleAllElon}
-          />
-
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={handleReset}
-            >
-              Back to Events
-            </Button>
-            <Button onClick={handleConfirm} disabled={confirming}>
-              {confirming ? 'Importing...' : 'Confirm Import'}
-            </Button>
-          </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
