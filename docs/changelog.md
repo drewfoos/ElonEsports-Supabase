@@ -4,13 +4,18 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
-## v0.10.2 — Semester Date Range Fix
+## v0.10.2 — Semester Date Range Fix & Delete
 
 ### Auto-Create Semesters
 - Removed Summer semester — only Spring and Fall now
 - Spring: Jan 1 – Jul 31 (was Jan 15 – May 15, left Jan 1–14 in a gap)
 - Fall: Aug 1 – Dec 31 (was Aug 16 – Dec 20, left Dec 21–31 in a gap)
 - Every calendar date now maps to a semester with no gaps
+
+### Semester Deletion
+- `deleteSemester` server action — blocks if tournaments still reference the semester
+- Cleans up `player_semester_scores` and `player_semester_status` rows before deleting
+- Delete button added to admin semesters table with confirmation dialog
 
 ---
 

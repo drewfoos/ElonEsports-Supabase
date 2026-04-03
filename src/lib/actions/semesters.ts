@@ -189,6 +189,37 @@ export async function createSemester(
   return data as Semester
 }
 
+export async function deleteSemester(
+  id: string
+): Promise<{ success: true } | { error: string }> {
+  await requireAdmin()
+
+  const supabase = createAdminClient()
+
+  // Only allow deletion if no tournaments reference this semester
+  const { count, error: countError } = await supabase
+    .from('tournaments')
+    .select('*', { count: 'exact', head: true })
+    .eq('semester_id', id)
+
+  if (countError) return { error: countError.message }
+  if (count && count > 0) {
+    return { error: `Cannot delete — ${count} tournament${count > 1 ? 's' : ''} still in this semester. Move or delete them first.` }
+  }
+
+  // Also clean up any player_semester_status and player_semester_scores rows
+  await Promise.all([
+    supabase.from('player_semester_scores').delete().eq('semester_id', id),
+    supabase.from('player_semester_status').delete().eq('semester_id', id),
+  ])
+
+  const { error } = await supabase.from('semesters').delete().eq('id', id)
+  if (error) return { error: error.message }
+
+  revalidatePath('/admin/semesters')
+  return { success: true }
+}
+
 // ---------------------------------------------------------------------------
 // Overlap check helper
 // ---------------------------------------------------------------------------

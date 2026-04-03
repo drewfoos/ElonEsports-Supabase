@@ -5,6 +5,7 @@ import {
   getSemesters,
   updateSemester,
   createSemester,
+  deleteSemester,
 } from '@/lib/actions/semesters'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -169,17 +170,36 @@ export default function SemestersClient({ initialSemesters }: { initialSemesters
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setEditSemester(s)
-                          setEditStart(s.start_date)
-                          setEditEnd(s.end_date)
-                        }}
-                      >
-                        Edit
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditSemester(s)
+                            setEditStart(s.start_date)
+                            setEditEnd(s.end_date)
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={async () => {
+                            if (!confirm(`Delete "${s.name}"? This only works if the semester has no tournaments.`)) return
+                            const result = await deleteSemester(s.id)
+                            if ('error' in result) {
+                              toast.error(result.error)
+                            } else {
+                              toast.success(`Deleted "${s.name}"`)
+                              loadSemesters()
+                            }
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )
