@@ -519,7 +519,27 @@ export async function mergePlayers(
     if (upsertError) return { error: upsertError.message }
   }
 
-  // 5. Merge startgg_player_ids (deduplicated) + delete merged player
+  // 5. Reassign sets from mergeId → keepId
+  // First, delete sets where the two merged players played each other
+  // (would otherwise become winner=keepId AND loser=keepId — self-play)
+  const { error: selfPlayError } = await supabase
+    .from('sets')
+    .delete()
+    .or(`and(winner_player_id.eq.${keepId},loser_player_id.eq.${mergeId}),and(winner_player_id.eq.${mergeId},loser_player_id.eq.${keepId})`)
+
+  if (selfPlayError) return { error: `Merge failed during self-play cleanup: ${selfPlayError.message}` }
+
+  // Then reassign remaining sets
+  const setOps: PromiseLike<{ error: { message: string } | null }>[] = [
+    supabase.from('sets').update({ winner_player_id: keepId }).eq('winner_player_id', mergeId),
+    supabase.from('sets').update({ loser_player_id: keepId }).eq('loser_player_id', mergeId),
+  ]
+  const setResults = await Promise.all(setOps)
+  for (const r of setResults) {
+    if (r.error) return { error: `Merge failed during set reassignment: ${r.error.message}` }
+  }
+
+  // 6. Merge startgg_player_ids (deduplicated)
   const combinedIds = [...new Set([
     ...(keepPlayerRes.data.startgg_player_ids ?? []),
     ...(mergePlayerRes.data.startgg_player_ids ?? []),
@@ -534,7 +554,7 @@ export async function mergePlayers(
     return { error: updateIdsError.message }
   }
 
-  // 6. Delete the merged player record (cascades via FK)
+  // 7. Delete the merged player record (cascades via FK)
   const { error: deletePlayerError } = await supabase
     .from('players')
     .delete()
