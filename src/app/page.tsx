@@ -1,8 +1,20 @@
+import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { createStaticClient } from '@/lib/supabase/static'
 import { unstable_cache } from 'next/cache'
 import type { Semester, LeaderboardEntry } from '@/lib/types'
 import { LeaderboardClient } from './leaderboard-client'
+
+export const metadata: Metadata = {
+  title: 'Power Rankings',
+  description:
+    'Live Smash Bros. Ultimate power rankings for Elon University Esports. See who tops the leaderboard each semester.',
+  openGraph: {
+    title: 'Power Rankings | Elon Esports Smash PR',
+    description:
+      'Live Smash Bros. Ultimate power rankings for Elon University Esports.',
+  },
+}
 
 const getLeaderboardData = unstable_cache(
   async () => {

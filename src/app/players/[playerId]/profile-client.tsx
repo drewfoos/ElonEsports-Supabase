@@ -241,6 +241,8 @@ export function ProfileClient({ profile, fetchedAt }: { profile: PlayerProfile; 
       <footer className="border-t border-white/[0.06] py-6">
         <p className="text-center text-xs text-white/20">
           Elon University Esports Club
+          <br />
+          <span className="text-white/10">Not affiliated with Nintendo</span>
         </p>
       </footer>
     </div>

@@ -195,12 +195,12 @@ Admin → POST mergePlayers(keepId, mergeId)
 - **Single semester query** — collapsed two sequential fallback queries into one sorted query with client-side pick
 - **Canvas fireworks** — particle system with gravity, glow trails, and staggered bursts; swap-and-pop O(1) particle removal; animation loop stops when all particles are gone
 - **Staggered animations** — podium cards bounce in sequentially, table rows fade in with delay offsets
-- **HeroGeometric** — `LazyMotion` + `domAnimation` (~5KB vs ~32KB gzipped); `fadeUpVariants` hoisted to module scope
+- **HeroGeometric** — `LazyMotion` + `domAnimation` (~5KB vs ~32KB gzipped); `fadeUpVariants` hoisted to module scope; character renders (WebP, 688KB total) inside floating shapes with `mix-blend-luminosity`
 - **Cache refresh** — "Updated Xs ago" display with refresh button; 15s server-enforced cooldown per IP+tag
 
 ### Player Pages
 
-- **Players directory** — queries filtered by Elon player IDs (fetches IDs first, then filters `tournament_results` and `sets` by those IDs instead of scanning entire tables); cached with `players-list` tag and 60s TTL
+- **Players directory** — queries filtered by Elon player IDs (fetches IDs first, then filters `tournament_results` and `sets` by those IDs instead of scanning entire tables); cached with `players-list` tag and 60s TTL; client-side pagination (50/page)
 - **Player profile** — 3 parallel DB batches (down from 4 sequential); `totalSets`, `totalWins`, `winPct` and reversed arrays computed server-side (no client recomputation); cached with `player-profile` tag
 - **SVG visualizations** — Performance Signal (waveform bars), Placement Timeline (cubic spline line chart), Player Journey (milestone timeline); all pure SVG, no charting library
 - **Head-to-head** — expandable table (first 10 shown, rest on demand); win-rate bars rendered inline

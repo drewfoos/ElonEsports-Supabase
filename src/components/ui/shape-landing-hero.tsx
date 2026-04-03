@@ -3,6 +3,7 @@
 import { LazyMotion, domAnimation, m } from "framer-motion";
 import { Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 
 function ElegantShape({
@@ -12,6 +13,8 @@ function ElegantShape({
     height = 100,
     rotate = 0,
     gradient = "from-white/[0.08]",
+    characterImg,
+    imgClassName,
 }: {
     className?: string;
     delay?: number;
@@ -19,6 +22,8 @@ function ElegantShape({
     height?: number;
     rotate?: number;
     gradient?: string;
+    characterImg?: string;
+    imgClassName?: string;
 }) {
     return (
         <m.div
@@ -57,15 +62,25 @@ function ElegantShape({
             >
                 <div
                     className={cn(
-                        "absolute inset-0 rounded-full",
+                        "absolute inset-0 rounded-full overflow-hidden",
                         "bg-gradient-to-r to-transparent",
                         gradient,
                         "backdrop-blur-[2px] border-2 border-white/[0.15]",
                         "shadow-[0_8px_32px_0_rgba(255,255,255,0.1)]",
-                        "after:absolute after:inset-0 after:rounded-full",
+                        "after:absolute after:inset-0 after:rounded-full after:z-10",
                         "after:bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.2),transparent_70%)]"
                     )}
-                />
+                >
+                    {characterImg && (
+                        <Image
+                            src={characterImg}
+                            alt=""
+                            fill
+                            className={cn("object-contain opacity-40 mix-blend-luminosity scale-125", imgClassName)}
+                            sizes="(max-width: 768px) 200px, 400px"
+                        />
+                    )}
+                </div>
             </m.div>
         </m.div>
     );
@@ -108,6 +123,7 @@ function HeroGeometric({
                     rotate={12}
                     gradient="from-indigo-500/[0.15]"
                     className="left-[-10%] md:left-[-5%] top-[15%] md:top-[20%]"
+                    characterImg="/characters/mario.webp"
                 />
 
                 <ElegantShape
@@ -117,6 +133,8 @@ function HeroGeometric({
                     rotate={-15}
                     gradient="from-rose-500/[0.15]"
                     className="right-[-5%] md:right-[0%] top-[70%] md:top-[75%]"
+                    characterImg="/characters/captain-falcon.webp"
+                    imgClassName="object-center scale-[2] translate-y-[45%]"
                 />
 
                 <ElegantShape
@@ -126,6 +144,7 @@ function HeroGeometric({
                     rotate={-8}
                     gradient="from-violet-500/[0.15]"
                     className="left-[5%] md:left-[10%] bottom-[5%] md:bottom-[10%]"
+                    characterImg="/characters/kirby.webp"
                 />
 
                 <ElegantShape
@@ -135,6 +154,7 @@ function HeroGeometric({
                     rotate={20}
                     gradient="from-amber-500/[0.15]"
                     className="right-[15%] md:right-[20%] top-[10%] md:top-[15%]"
+                    characterImg="/characters/pikachu.webp"
                 />
 
                 <ElegantShape
@@ -144,6 +164,7 @@ function HeroGeometric({
                     rotate={-25}
                     gradient="from-cyan-500/[0.15]"
                     className="left-[20%] md:left-[25%] top-[5%] md:top-[10%]"
+                    characterImg="/characters/fox.webp"
                 />
             </div>
 

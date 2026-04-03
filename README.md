@@ -24,7 +24,7 @@ average = sum(scores) / tournaments_played
 
 ### Public Leaderboard
 
-- Animated geometric hero with floating shapes (framer-motion `LazyMotion` for tree-shaking)
+- Animated geometric hero with floating shapes and Smash character renders (framer-motion `LazyMotion` for tree-shaking)
 - Animated podium with Trophy and Medal icons (Lucide), gradient glow effects, and bounce-in animations
 - Canvas fireworks celebration on load (auto-stops when particles are gone)
 - Semester selector and debounced min-tournament slider
@@ -35,7 +35,7 @@ average = sum(scores) / tournaments_played
 
 ### Player Profiles
 
-- Player directory at `/players` with search, stats bar, and responsive card/table views
+- Player directory at `/players` with search, stats bar, pagination (50/page), and responsive card/table views
 - Individual profiles at `/players/[id]` with stat cards (rank, best placement, avg score, set record)
 - SVG trend chart showing score progression across tournaments (monotone cubic spline)
 - Head-to-head records with win-rate bars, sorted by total sets played
@@ -68,7 +68,7 @@ average = sum(scores) / tournaments_played
 ### Semester Management
 
 - Create semesters with date ranges (overlap validation prevents conflicts)
-- **Auto-create semesters** — tournaments for uncovered dates generate a semester based on academic calendar (Spring Jan-May, Summer May-Aug, Fall Aug-Dec)
+- **Auto-create semesters** — tournaments for uncovered dates generate a semester based on academic calendar (Spring Jan–Jul, Fall Aug–Dec)
 - Tournaments auto-reassign when semester dates change
 - Scores recalculate automatically on any data change
 

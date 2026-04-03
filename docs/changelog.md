@@ -4,6 +4,36 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v0.11.0 — Branding, SEO, Pagination & Character Art
+
+### Favicon & Branding
+- Custom favicon set: `.ico`, `.svg`, `96x96 PNG`, Apple touch icon, PWA manifest icons
+- SVG logo added to nav bars on leaderboard, players directory, admin sidebar, and admin mobile header
+- PWA `site.webmanifest` with correct app name and dark theme color
+
+### SEO
+- Root layout: `metadataBase`, title template (`%s | Elon Esports Smash PR`), keywords, OpenGraph, Twitter card, robots
+- Homepage: "Power Rankings" title + description
+- Players directory: "Player Directory" title + description
+- Player profile: dynamic `generateMetadata` with player's gamer tag
+
+### Character Art in Hero
+- 5 Smash Ultimate character renders (Mario, Captain Falcon, Kirby, Pikachu, Fox) inside floating geometric shapes
+- Renders clipped inside shapes with 40% opacity + `mix-blend-luminosity` for frosted glass effect
+- Downloaded from [smash-ultimate-assets](https://github.com/marcrd/smash-ultimate-assets), converted to optimized WebP (6MB PNG → 688KB WebP)
+- `ElegantShape` component extended with optional `characterImg` and `imgClassName` props
+
+### Players Directory
+- Client-side pagination at 50 per page with prev/next controls
+- Search resets to page 1
+- Scatter plot still shows all filtered results
+
+### UI Polish
+- `LastUpdated` refresh button moved from bottom to above content on leaderboard and players pages
+- "Not affiliated with Nintendo" disclaimer added to all public page footers
+
+---
+
 ## v0.10.3 — Admin UI Redesign & Scrollbar Polish
 
 ### Import Tournament Dialog

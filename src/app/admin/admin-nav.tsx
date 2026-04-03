@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { signOut } from '@/lib/actions/auth'
 import { Button } from '@/components/ui/button'
@@ -39,7 +40,10 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="px-4 py-5">
-        <Link href="/" className="text-lg font-bold text-foreground hover:text-amber-400 transition-colors">Elon Esports</Link>
+        <Link href="/" className="flex items-center gap-2 text-lg font-bold text-foreground hover:text-amber-400 transition-colors">
+          <Image src="/icon.svg" alt="" width={32} height={32} className="h-8 w-8" />
+          Elon Esports
+        </Link>
         <p className="mt-1 truncate text-xs text-muted-foreground">{userEmail}</p>
       </div>
 
@@ -87,7 +91,10 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
     <>
       {/* Mobile header bar */}
       <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
-        <Link href="/" className="text-sm font-bold text-foreground hover:text-amber-400 transition-colors">Elon Esports Admin</Link>
+        <Link href="/" className="flex items-center gap-2 text-sm font-bold text-foreground hover:text-amber-400 transition-colors">
+          <Image src="/icon.svg" alt="" width={28} height={28} className="h-7 w-7" />
+          Elon Esports Admin
+        </Link>
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}

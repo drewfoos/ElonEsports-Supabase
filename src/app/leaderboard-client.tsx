@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   Select,
   SelectContent,
@@ -254,6 +255,7 @@ export function LeaderboardClient({
       <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#030303]/90 backdrop-blur-lg">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
+            <Image src="/icon.svg" alt="" width={32} height={32} className="h-8 w-8" />
             <span className="text-lg font-bold tracking-tight text-white">
               Elon Esports
             </span>
@@ -362,6 +364,12 @@ export function LeaderboardClient({
           </div>
         )}
 
+        {!loading && entries.length > 0 && (
+          <div className="mb-4 flex justify-start">
+            <LastUpdated fetchedAt={fetchedAt} tag="leaderboard-data" />
+          </div>
+        )}
+
         {/* Podium - top 3 */}
         {!loading && top3.length > 0 && (
           <div className="relative mb-12">
@@ -445,9 +453,6 @@ export function LeaderboardClient({
             </Table>
           </div>
 
-          <div className="mt-4 flex justify-center">
-            <LastUpdated fetchedAt={fetchedAt} tag="leaderboard-data" />
-          </div>
           </>
         )}
       </main>
@@ -456,6 +461,8 @@ export function LeaderboardClient({
       <footer className="border-t border-white/[0.06] py-6">
         <p className="text-center text-xs text-white/20">
           Elon University Esports Club
+          <br />
+          <span className="text-white/10">Not affiliated with Nintendo</span>
         </p>
       </footer>
     </div>

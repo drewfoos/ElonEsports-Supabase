@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   Table,
   TableBody,
@@ -20,20 +21,36 @@ import {
   Medal,
   Gamepad2,
   ChevronRight,
+  ChevronLeft,
   UserSearch,
 } from 'lucide-react'
 import { LastUpdated } from '@/components/last-updated'
 import { PlayerScatter } from './player-scatter'
 import type { PlayerListItem } from './page'
 
+const PAGE_SIZE = 50
+
 export function PlayersListClient({ players, fetchedAt }: { players: PlayerListItem[]; fetchedAt: number }) {
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
 
   const filtered = useMemo(() => {
     if (!search) return players
     const lower = search.toLowerCase()
     return players.filter((p) => p.gamer_tag.toLowerCase().includes(lower))
   }, [players, search])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const paged = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE
+    return filtered.slice(start, start + PAGE_SIZE)
+  }, [filtered, page])
+
+  // Reset to page 1 when search changes
+  const handleSearch = (value: string) => {
+    setSearch(value)
+    setPage(1)
+  }
 
   const totalSets = useMemo(() => players.reduce((s, p) => s + p.total_sets, 0), [players])
   const championsCount = useMemo(() => players.filter((p) => p.best_placement === 1).length, [players])
@@ -44,7 +61,8 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
       <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#030303]/90 backdrop-blur-lg">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
-            <Link href="/" className="text-lg font-bold tracking-tight text-white transition-colors hover:text-white/80">
+            <Link href="/" className="flex items-center gap-2 text-lg font-bold tracking-tight text-white transition-colors hover:text-white/80">
+              <Image src="/icon.svg" alt="" width={32} height={32} className="h-8 w-8" />
               Elon Esports
             </Link>
             <Badge className="border-0 bg-white/[0.06] text-[10px] uppercase tracking-wider text-white/50">
@@ -102,7 +120,7 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
             <input
               placeholder="Search by gamer tag..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearch(e.target.value)}
               className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] py-2 pl-10 pr-4 text-sm text-white placeholder:text-white/25 outline-none transition-colors focus:border-white/[0.15] focus:bg-white/[0.05]"
             />
           </div>
@@ -125,12 +143,13 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
                 Clear search
               </button>
             )}
-            <div className="mt-4">
-              <LastUpdated fetchedAt={fetchedAt} tag="players-list" />
-            </div>
           </div>
         ) : (
           <>
+            <div className="mb-4 flex justify-start">
+              <LastUpdated fetchedAt={fetchedAt} tag="players-list" />
+            </div>
+
             {/* Scatter plot */}
             <div className="mb-6">
               <PlayerScatter players={filtered} />
@@ -139,7 +158,7 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
             {/* Mobile card view */}
             <div className="block sm:hidden">
               <div className="grid grid-cols-1 gap-2.5">
-                {filtered.map((p, i) => (
+                {paged.map((p, i) => (
                   <Link key={p.id} href={`/players/${p.id}`}>
                     <div
                       className="group flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 transition-all hover:border-white/[0.12] hover:bg-white/[0.04]"
@@ -201,7 +220,7 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map((p, i) => (
+                    {paged.map((p, i) => (
                       <TableRow
                         key={p.id}
                         className="group cursor-pointer border-white/[0.04] transition-colors hover:bg-white/[0.03]"
@@ -242,9 +261,31 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
               </div>
             </div>
 
-            <div className="mt-4 flex justify-center">
-              <LastUpdated fetchedAt={fetchedAt} tag="players-list" />
-            </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-6 flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-sm text-white/40">
+                  <span className="font-mono text-white/60">{page}</span>
+                  {' / '}
+                  <span className="font-mono text-white/60">{totalPages}</span>
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
           </>
         )}
       </main>
@@ -252,6 +293,8 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
       <footer className="border-t border-white/[0.06] py-6">
         <p className="text-center text-xs text-white/20">
           Elon University Esports Club
+          <br />
+          <span className="text-white/10">Not affiliated with Nintendo</span>
         </p>
       </footer>
     </div>
