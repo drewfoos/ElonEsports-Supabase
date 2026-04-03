@@ -4,6 +4,16 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v0.10.2 — Semester Date Range Fix
+
+### Auto-Create Semesters
+- Removed Summer semester — only Spring and Fall now
+- Spring: Jan 1 – Jul 31 (was Jan 15 – May 15, left Jan 1–14 in a gap)
+- Fall: Aug 1 – Dec 31 (was Aug 16 – Dec 20, left Dec 21–31 in a gap)
+- Every calendar date now maps to a semester with no gaps
+
+---
+
 ## v0.10.1 — Semester Tab Pagination
 
 ### Admin Players — Semester Tab
@@ -250,7 +260,7 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ### Auto-Create Semesters
 - `findOrCreateSemester(date, client)` — shared helper used by both manual entry and start.gg import
-- Academic calendar conventions: Spring (Jan 15 - May 15), Summer (May 16 - Aug 15), Fall (Aug 16 - Dec 20)
+- Academic calendar conventions: Spring (Jan 1 – Jul 31), Fall (Aug 1 – Dec 31)
 - Trims auto-generated range to avoid overlapping existing semesters
 - Duplicate name detection with date-range suffix fallback
 - Added overlap validation to both `createSemester()` and `updateSemester()`

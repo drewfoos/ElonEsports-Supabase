@@ -234,9 +234,8 @@ async function checkSemesterOverlap(
  * academic calendar conventions. Returns the semester ID.
  *
  * Academic periods:
- *   Spring: Jan 15 – May 15
- *   Summer: May 16 – Aug 15
- *   Fall:   Aug 16 – Dec 20
+ *   Spring: Jan 1 – Jul 31
+ *   Fall:   Aug 1 – Dec 31
  *
  * If the auto-generated range would overlap an existing semester, the range
  * is trimmed to fit (start after the overlapping semester ends, or end before
@@ -267,21 +266,16 @@ export async function findOrCreateSemester(
   let startDate: string
   let endDate: string
 
-  if (month <= 5 && (month < 5 || day <= 15)) {
-    // Spring: Jan 15 – May 15
+  if (month <= 7) {
+    // Spring: Jan 1 – Jul 31
     name = `Spring ${year}`
-    startDate = `${year}-01-15`
-    endDate = `${year}-05-15`
-  } else if (month <= 8 && (month < 8 || day <= 15)) {
-    // Summer: May 16 – Aug 15
-    name = `Summer ${year}`
-    startDate = `${year}-05-16`
-    endDate = `${year}-08-15`
+    startDate = `${year}-01-01`
+    endDate = `${year}-07-31`
   } else {
-    // Fall: Aug 16 – Dec 20
+    // Fall: Aug 1 – Dec 31
     name = `Fall ${year}`
-    startDate = `${year}-08-16`
-    endDate = `${year}-12-20`
+    startDate = `${year}-08-01`
+    endDate = `${year}-12-31`
   }
 
   // Check for overlapping semesters and trim the range to avoid conflicts
