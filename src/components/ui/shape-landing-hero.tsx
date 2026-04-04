@@ -184,26 +184,19 @@ function HeroGeometric({
                         </span>
                     </m.div>
 
-                    <m.div
-                        custom={1}
-                        variants={fadeUpVariants}
-                        initial="hidden"
-                        animate="visible"
-                    >
-                        <h1 className="text-5xl sm:text-7xl md:text-8xl font-bold mb-8 md:mb-10 tracking-tight leading-[0.9]">
-                            <span className="bg-clip-text text-transparent bg-gradient-to-b from-white to-white/80">
-                                {title1}
-                            </span>
-                            <br />
-                            <span
-                                className={cn(
-                                    "bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 via-white/90 to-rose-300"
-                                )}
-                            >
-                                {title2}
-                            </span>
-                        </h1>
-                    </m.div>
+                    <h1 className="text-5xl sm:text-7xl md:text-8xl font-bold mb-8 md:mb-10 tracking-tight leading-[0.9]">
+                        <span className="bg-clip-text text-transparent bg-gradient-to-b from-white to-white/80">
+                            {title1}
+                        </span>
+                        <br />
+                        <span
+                            className={cn(
+                                "bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 via-white/90 to-rose-300"
+                            )}
+                        >
+                            {title2}
+                        </span>
+                    </h1>
 
                     {children && (
                         <m.div

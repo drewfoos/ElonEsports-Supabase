@@ -62,12 +62,12 @@ export function LastUpdated({
   const disabled = refreshing || cooldown > 0
 
   return (
-    <div className="flex items-center gap-2.5 text-xs text-white/30">
+    <div className="flex items-center gap-2.5 text-xs text-white/50">
       <span>Updated {timeAgo}</span>
       <button
         onClick={handleRefresh}
         disabled={disabled}
-        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-white/[0.06] px-2 py-1 text-white/30 transition-colors hover:border-white/[0.12] hover:bg-white/[0.04] hover:text-white/50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-white/[0.06] disabled:hover:bg-transparent disabled:hover:text-white/30"
+        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-white/[0.06] px-2 py-1 text-white/50 transition-colors hover:border-white/[0.12] hover:bg-white/[0.04] hover:text-white/70 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-white/[0.06] disabled:hover:bg-transparent disabled:hover:text-white/50"
       >
         <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
         {cooldown > 0 ? (

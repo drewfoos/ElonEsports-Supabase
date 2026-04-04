@@ -268,14 +268,14 @@ export function LeaderboardClient({
         {/* Controls bar */}
         <div className="mb-8 flex items-end justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-4 sm:mb-10 sm:px-5">
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-white/40">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-white/50">
               Semester
-            </label>
+            </span>
             <Select
               value={selectedSemesterId}
               onValueChange={handleSemesterChange}
             >
-              <SelectTrigger className="w-40 sm:w-52 border-white/[0.08] bg-white/[0.03] text-white/80 [&>svg]:text-white/30">
+              <SelectTrigger aria-label="Select semester" className="w-40 sm:w-52 border-white/[0.08] bg-white/[0.03] text-white/80 [&>svg]:text-white/30">
                 <SelectValue placeholder="Select semester">
                   {semesters.find((s) => s.id === selectedSemesterId)?.name}
                 </SelectValue>
@@ -291,10 +291,10 @@ export function LeaderboardClient({
           </div>
 
           <div className="flex flex-col gap-1.5 items-end">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-white/40">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-white/50">
               Min. Tournaments:{' '}
-              <span className="text-white/50 font-mono">{minTournaments}</span>
-            </label>
+              <span className="text-white/60 font-mono">{minTournaments}</span>
+            </span>
             <div className="w-32 sm:w-52">
               <input
                 type="range"
@@ -372,10 +372,10 @@ export function LeaderboardClient({
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-white/[0.06]">
-                  <TableHead className="w-16 text-center text-white/30">Rank</TableHead>
-                  <TableHead className="text-white/30">Player</TableHead>
-                  <TableHead className="text-right text-white/30">Avg Score</TableHead>
-                  <TableHead className="text-right text-white/30">Tournaments</TableHead>
+                  <TableHead className="w-16 text-center text-white/50">Rank</TableHead>
+                  <TableHead className="text-white/50">Player</TableHead>
+                  <TableHead className="text-right text-white/50">Avg Score</TableHead>
+                  <TableHead className="text-right text-white/50">Tournaments</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -428,10 +428,10 @@ export function LeaderboardClient({
         {!loading && recentTournaments.length > 0 && (
           <div className="mt-10 sm:mt-12">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-sm font-medium uppercase tracking-wider text-white/40">
+              <h2 className="text-sm font-medium uppercase tracking-wider text-white/50">
                 Recent Tournaments
               </h2>
-              <Link href="/tournaments" className="text-xs text-white/30 transition-colors hover:text-white/60">
+              <Link href="/tournaments" className="text-xs text-white/50 transition-colors hover:text-white/70">
                 View all
               </Link>
             </div>
@@ -447,7 +447,7 @@ export function LeaderboardClient({
                   <span className="truncate text-sm font-medium text-white/70 group-hover:text-white">
                     {t.name}
                   </span>
-                  <span className="shrink-0 ml-4 text-xs text-white/25">
+                  <span className="shrink-0 ml-4 text-xs text-white/50">
                     {new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
