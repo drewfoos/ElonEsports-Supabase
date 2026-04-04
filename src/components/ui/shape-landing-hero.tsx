@@ -15,6 +15,7 @@ function ElegantShape({
     gradient = "from-white/[0.08]",
     characterImg,
     imgClassName,
+    imgSizes,
 }: {
     className?: string;
     delay?: number;
@@ -24,6 +25,7 @@ function ElegantShape({
     gradient?: string;
     characterImg?: string;
     imgClassName?: string;
+    imgSizes?: string;
 }) {
     return (
         <m.div
@@ -76,9 +78,10 @@ function ElegantShape({
                             src={characterImg}
                             alt=""
                             fill
-                            loading="eager"
+                            loading="lazy"
+                            quality={50}
                             className={cn("object-contain opacity-40 mix-blend-luminosity scale-125", imgClassName)}
-                            sizes="(max-width: 768px) 200px, 400px"
+                            sizes={imgSizes ?? "200px"}
                         />
                     )}
                 </div>
@@ -125,6 +128,7 @@ function HeroGeometric({
                     gradient="from-indigo-500/[0.15]"
                     className="left-[-10%] md:left-[-5%] top-[15%] md:top-[20%]"
                     characterImg="/characters/mario.webp"
+                    imgSizes="(max-width: 768px) 250px, 600px"
                 />
 
                 <ElegantShape
@@ -136,6 +140,7 @@ function HeroGeometric({
                     className="right-[-5%] md:right-[0%] top-[70%] md:top-[75%]"
                     characterImg="/characters/captain-falcon.webp"
                     imgClassName="object-center scale-[2] translate-y-[45%]"
+                    imgSizes="(max-width: 768px) 200px, 500px"
                 />
 
                 <ElegantShape
@@ -146,6 +151,7 @@ function HeroGeometric({
                     gradient="from-violet-500/[0.15]"
                     className="hidden sm:block left-[5%] md:left-[10%] bottom-[5%] md:bottom-[10%]"
                     characterImg="/characters/kirby.webp"
+                    imgSizes="300px"
                 />
 
                 <ElegantShape
@@ -156,6 +162,7 @@ function HeroGeometric({
                     gradient="from-amber-500/[0.15]"
                     className="right-[15%] md:right-[20%] top-[10%] md:top-[15%]"
                     characterImg="/characters/pikachu.webp"
+                    imgSizes="(max-width: 768px) 100px, 200px"
                 />
 
                 <ElegantShape
@@ -166,6 +173,7 @@ function HeroGeometric({
                     gradient="from-cyan-500/[0.15]"
                     className="left-[20%] md:left-[25%] top-[5%] md:top-[10%]"
                     characterImg="/characters/fox.webp"
+                    imgSizes="(max-width: 768px) 64px, 150px"
                 />
             </div>
 
