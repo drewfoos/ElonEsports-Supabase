@@ -42,6 +42,7 @@ export interface TournamentResult {
   player_id: string;
   placement: number;
   score: number;
+  source_startgg_id: string | null;
 }
 
 export interface GameSet {
@@ -53,7 +54,17 @@ export interface GameSet {
   winner_score: number | null;
   loser_score: number | null;
   round: string | null;
+  winner_source_startgg_id: string | null;
+  loser_source_startgg_id: string | null;
   created_at: string;
+}
+
+export interface MergeHistory {
+  id: string;
+  keep_player_id: string;
+  merged_gamer_tag: string;
+  merged_startgg_ids: string[];
+  merged_at: string;
 }
 
 // start.gg API response types

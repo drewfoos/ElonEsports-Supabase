@@ -62,14 +62,33 @@ const getLeaderboardData = unstable_cache(
       }
     }
 
-    return { semesters, initialSemesterId, initialEntries, fetchedAt: Date.now() }
+    // Fetch 5 most recent start.gg tournaments for the initial semester
+    const recentTournaments: { name: string; date: string; startgg_slug: string }[] = []
+    if (initialSemesterId) {
+      const { data: tournamentRows } = await supabase
+        .from('tournaments')
+        .select('name, date, startgg_slug')
+        .eq('semester_id', initialSemesterId)
+        .eq('source', 'startgg')
+        .not('startgg_slug', 'is', null)
+        .order('date', { ascending: false })
+        .limit(5)
+
+      for (const t of tournamentRows ?? []) {
+        if (t.startgg_slug) {
+          recentTournaments.push({ name: t.name, date: t.date, startgg_slug: t.startgg_slug })
+        }
+      }
+    }
+
+    return { semesters, initialSemesterId, initialEntries, recentTournaments, fetchedAt: Date.now() }
   },
   ['leaderboard-data'],
   { revalidate: 60 }
 )
 
 export default async function LeaderboardPage() {
-  const { semesters, initialSemesterId, initialEntries, fetchedAt } =
+  const { semesters, initialSemesterId, initialEntries, recentTournaments, fetchedAt } =
     await getLeaderboardData()
 
   return (
@@ -77,6 +96,7 @@ export default async function LeaderboardPage() {
       semesters={semesters}
       initialSemesterId={initialSemesterId}
       initialEntries={initialEntries}
+      recentTournaments={recentTournaments}
       fetchedAt={fetchedAt}
     />
   )

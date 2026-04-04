@@ -509,10 +509,11 @@ export async function confirmTournamentImport(
         tournament_id: typedTournament.id,
         player_id: playerId,
         placement: standing.placement,
+        source_startgg_id: standing.startggPlayerId ? String(standing.startggPlayerId) : null,
       }
     })
     .filter(
-      (r): r is { tournament_id: string; player_id: string; placement: number } =>
+      (r): r is { tournament_id: string; player_id: string; placement: number; source_startgg_id: string | null } =>
         r !== null
     )
 
@@ -592,6 +593,8 @@ export async function confirmTournamentImport(
           let loserPlayerId: string | null = null
           let winnerScore: number | null = null
           let loserScore: number | null = null
+          let winnerSourceStartggId: string | null = null
+          let loserSourceStartggId: string | null = null
 
           for (const slot of set.slots) {
             if (!slot.entrant) continue
@@ -607,9 +610,11 @@ export async function confirmTournamentImport(
             if (isWinner) {
               winnerPlayerId = matchedPlayerId
               winnerScore = gameScore
+              winnerSourceStartggId = String(startggId)
             } else {
               loserPlayerId = matchedPlayerId
               loserScore = gameScore
+              loserSourceStartggId = String(startggId)
             }
           }
 
@@ -621,6 +626,8 @@ export async function confirmTournamentImport(
             winner_score: winnerScore,
             loser_score: loserScore,
             round: set.fullRoundText,
+            winner_source_startgg_id: winnerSourceStartggId,
+            loser_source_startgg_id: loserSourceStartggId,
           }
         })
 

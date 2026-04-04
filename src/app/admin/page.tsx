@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { RecalculateButton } from './recalculate-button'
+import { BackfillButton } from './backfill-button'
 import { GettingStarted } from './getting-started'
 
 const linkPrimary =
@@ -173,6 +174,7 @@ export default async function AdminDashboardPage() {
           {allSemesters.length > 0 && (
             <RecalculateButton semesters={allSemesters} tournamentCounts={semesterTournamentCounts} />
           )}
+          <BackfillButton />
         </div>
       </div>
 
@@ -190,39 +192,37 @@ export default async function AdminDashboardPage() {
               {recentTournaments.map((t) => (
                 <div
                   key={t.id}
-                  className="flex items-center justify-between text-sm"
+                  className="flex items-center gap-3 text-sm"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex-1 min-w-0 truncate">
                     {t.startgg_slug ? (
                       <a
                         href={`https://www.start.gg/${t.startgg_slug}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-medium text-foreground truncate underline-offset-2 hover:underline"
+                        className="font-medium text-foreground underline-offset-2 hover:underline"
                       >
                         {t.name}
                       </a>
                     ) : (
-                      <span className="font-medium text-foreground truncate">
+                      <span className="font-medium text-foreground">
                         {t.name}
                       </span>
                     )}
-                    <Badge
-                      variant={t.source === 'startgg' ? 'default' : 'secondary'}
-                      className="shrink-0 text-[10px]"
-                    >
-                      {t.source === 'startgg' ? 'start.gg' : 'Manual'}
-                    </Badge>
                   </div>
-                  <div className="flex items-center gap-4 shrink-0 text-muted-foreground">
-                    <span>{t.elon_participants}/{t.total_participants} Elon</span>
-                    <span className="w-20 text-right">
-                      {new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </span>
-                  </div>
+                  <Badge
+                    variant={t.source === 'startgg' ? 'default' : 'secondary'}
+                    className="shrink-0 text-[10px]"
+                  >
+                    {t.source === 'startgg' ? 'start.gg' : 'Manual'}
+                  </Badge>
+                  <span className="shrink-0 w-16 text-right text-xs text-muted-foreground">{t.elon_participants}/{t.total_participants} Elon</span>
+                  <span className="shrink-0 w-14 text-right text-xs text-muted-foreground">
+                    {new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </span>
                 </div>
               ))}
             </div>

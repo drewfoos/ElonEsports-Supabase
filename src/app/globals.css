@@ -129,6 +129,11 @@
   }
 }
 
+/* Date input calendar icon — visible in dark mode */
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
 /* Custom scrollbar — thin, rounded, subtle */
 .styled-scroll {
   scrollbar-width: thin !important;

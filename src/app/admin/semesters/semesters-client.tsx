@@ -12,14 +12,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -42,7 +34,7 @@ function TableSkeleton({ rows = 4, cols = 5 }: { rows?: number; cols?: number })
   return (
     <div className="rounded-md border">
       <div className="border-b px-4 py-3">
-        <div className="flex gap-8">
+        <div className="flex gap-4 sm:gap-8">
           {Array.from({ length: cols }).map((_, i) => (
             <div key={i} className={`h-4 ${widths[i % widths.length]} animate-pulse rounded bg-muted`} />
           ))}
@@ -143,69 +135,66 @@ export default function SemestersClient({ initialSemesters }: { initialSemesters
       ) : semesters.length === 0 ? (
         <div className="flex justify-center py-12 text-muted-foreground">No semesters yet</div>
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Start Date</TableHead>
-                <TableHead>End Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[80px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {semesters.map(s => {
-                const status = semesterStatus(s)
-                return (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.name}</TableCell>
-                    <TableCell>{formatDate(s.start_date)}</TableCell>
-                    <TableCell>{formatDate(s.end_date)}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={status === 'current' ? 'default' : 'secondary'}
-                      >
-                        {status === 'current' ? 'Current' : status === 'past' ? 'Past' : 'Future'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setEditSemester(s)
-                            setEditStart(s.start_date)
-                            setEditEnd(s.end_date)
-                          }}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={async () => {
-                            if (!confirm(`Delete "${s.name}"? This only works if the semester has no tournaments.`)) return
-                            const result = await deleteSemester(s.id)
-                            if ('error' in result) {
-                              toast.error(result.error)
-                            } else {
-                              toast.success(`Deleted "${s.name}"`)
-                              loadSemesters()
-                            }
-                          }}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+        <div className="flex flex-col gap-3">
+          {semesters.map(s => {
+            const status = semesterStatus(s)
+            const accentClass = status === 'current'
+              ? 'border-l-primary'
+              : status === 'future'
+                ? 'border-l-blue-400'
+                : 'border-l-muted-foreground/30'
+            return (
+              <div
+                key={s.id}
+                className={`rounded-lg border border-l-[3px] ${accentClass} bg-card p-3.5 sm:p-4`}
+              >
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-4">
+                  <div className="flex items-center justify-between gap-2 sm:flex-1 sm:justify-start">
+                    <span className="font-semibold truncate">{s.name}</span>
+                    <Badge variant={status === 'current' ? 'default' : 'secondary'} className="shrink-0 text-[10px]">
+                      {status === 'current' ? 'Current' : status === 'past' ? 'Past' : 'Future'}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground sm:text-sm">
+                    <span>{formatDate(s.start_date)}</span>
+                    <span className="text-muted-foreground/40">—</span>
+                    <span>{formatDate(s.end_date)}</span>
+                  </div>
+                  <div className="flex gap-1 pt-0.5 sm:pt-0 sm:ml-auto sm:shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2.5 text-xs"
+                      onClick={() => {
+                        setEditSemester(s)
+                        setEditStart(s.start_date)
+                        setEditEnd(s.end_date)
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2.5 text-xs text-destructive hover:text-destructive"
+                      onClick={async () => {
+                        if (!confirm(`Delete "${s.name}"? This only works if the semester has no tournaments.`)) return
+                        const result = await deleteSemester(s.id)
+                        if ('error' in result) {
+                          toast.error(result.error)
+                        } else {
+                          toast.success(`Deleted "${s.name}"`)
+                          loadSemesters()
+                        }
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 

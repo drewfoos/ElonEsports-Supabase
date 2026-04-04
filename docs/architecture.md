@@ -139,22 +139,50 @@ UI uses optimistic toggle — switch flips instantly, reverts on error.
 
 > Players cannot be deleted — only merged or left inactive. This prevents distorting tournament history.
 
-### Admin: Merge Players
+### Admin: Merge Players (Atomic)
 
 ```
 Admin → POST mergePlayers(keepId, mergeId)
      → Verify session + ADMIN_EMAIL
      → Parallel: fetch all data upfront (6 queries in 1 round trip)
-     → Reassign tournament_results: mergeId → keepId
-       → If conflict (both in same tournament), keep better placement
-       → total_participants NOT decremented (same person tracked twice)
-     → Reassign player_semester_status: mergeId → keepId
-       → If conflict, prefer is_elon_student = true
-     → Append mergeId's startgg_player_ids to keepId
-     → Delete mergeId player record
+     → Classify data in JS:
+       → Conflict results (both in same tournament) → keep better placement
+       → Non-conflict results → reassign to keepId
+       → Self-play sets (both players in same set) → delete
+       → Sets where mergeId is winner/loser → reassign to keepId
+       → Semester status conflicts → prefer is_elon_student = true
+     → Single RPC call: merge_players_atomic(...)
+       → All mutations in one Postgres transaction (PL/pgSQL)
+       → Reassigns results, deletes conflicts, reassigns sets,
+         deletes self-play, merges startgg_player_ids,
+         upserts semester status, records merge_history,
+         deletes merged player
      → Parallel: recalculate all affected semesters
      → Return success
 ```
+
+Safe against browser close / network loss — either all mutations commit or none do.
+
+### Admin: Unmerge Players (Atomic)
+
+```
+Admin → POST unmergePlayers(playerId, startggIdToSplit)
+     → Verify session + ADMIN_EMAIL
+     → Validate: player has the ID, has 2+ IDs
+     → Look up merge_history for original gamer_tag (fallback to generated name)
+     → Single RPC call: unmerge_player_atomic(...)
+       → Creates new player with split-off start.gg ID + restored gamer_tag
+       → Reassigns tournament_results by source_startgg_id
+       → Reassigns sets by winner/loser_source_startgg_id
+       → Removes ID from original player's array
+       → Copies player_semester_status for affected semesters
+       → Deletes merge_history record
+       → Returns JSONB: {new_player_id, moved_results, moved_sets, skipped_results}
+     → Parallel: recalculate all affected semesters
+     → Return counts + warning for NULL-source rows
+```
+
+Requires `source_startgg_id` columns to be populated (via import or backfill).
 
 ## Performance Optimizations
 
@@ -170,6 +198,12 @@ Admin → POST mergePlayers(keepId, mergeId)
 - **Deferred sets import** — uses `after()` from `next/server` to insert sets and recalculate scores after the response is sent, reducing import time from ~15-30s to ~2-3s
 - **Optimized pagination** — standings at 100/page (~800 objects), sets at 40/page (~680 objects), staying under start.gg's 1000-object complexity cap
 - **400ms inter-page delay** — respects start.gg's 80 req/60s rate limit
+- **Source tracking** — `source_startgg_id` on tournament_results and `winner/loser_source_startgg_id` on sets populated during import, enabling future unmerge operations
+
+### Merge Dialog
+
+- **`React.memo`** on `MergePanel` — prevents cross-panel re-renders during search
+- **`shouldFilter={false}`** on cmdk `Command` — disables internal fuzzy-match (external `useMemo` filter handles it), eliminating double-filter lag
 
 ### Server Actions
 
@@ -190,6 +224,14 @@ Admin → POST mergePlayers(keepId, mergeId)
 - **ISR caching** — `unstable_cache` with `leaderboard-data` tag and 60s TTL on both SSR page and API route; `updateTag` invalidates both simultaneously
 - **Server-side rendering** — page.tsx is a Server Component that fetches semesters, auth state, and initial leaderboard data in parallel (zero client waterfalls on first load)
 - **Client interactivity** — semester picker, min tournaments slider, and fireworks extracted to `leaderboard-client.tsx`; subsequent filter changes fetch via `/api/leaderboard`
+- **Recent tournaments** — 5 most recent start.gg tournaments shown below leaderboard table with links to `/tournaments` page
+
+### Public Tournaments
+
+- **ISR caching** — `unstable_cache` with `tournaments-list` tag and 120s TTL; SSR fetches first page + semester list in parallel
+- **Pagination** — 20 per page, client-side prev/next; subsequent pages fetched via `/api/tournaments` (minimal column select)
+- **Semester filter** — dropdown filter with API-side filtering; grouped by semester with subheader labels
+- **No double fetches** — initial SSR data used directly; API only called on filter change or pagination
 - **Direct fetch handlers** — semester/slider changes call fetch directly from handlers (no `useEffect`/`useCallback` chain), eliminating double-renders
 - **Debounced slider** — 300ms debounce on min-tournaments slider prevents API request per drag tick
 - **Single semester query** — collapsed two sequential fallback queries into one sorted query with client-side pick
@@ -224,6 +266,8 @@ All create operations include duplicate detection to prevent accidental double-s
 - **Lock release** — always in `finally` block; release errors logged but don't fail the operation
 - **No player deletion** — players can only be merged or left inactive, preventing tournament history distortion
 - **Merge preserves counts** — `total_participants` is never decremented on merge conflicts (same person tracked twice)
+- **Atomic merge/unmerge** — all mutation steps wrapped in Postgres RPC functions (`merge_players_atomic`, `unmerge_player_atomic`); browser close or network loss cannot leave data in a partial state
+- **Merge history** — `merge_history` table records original gamer_tag and startgg_player_ids for each merge, enabling clean unmerge
 
 ## Error Handling
 
@@ -289,6 +333,9 @@ src/
 │   │       ├── performance-signal.tsx # Waveform bar chart (percentile per tournament)
 │   │       ├── placement-timeline.tsx # Line chart (percentile progression over time)
 │   │       └── player-journey.tsx     # Spotify Wrapped-style career milestones
+│   ├── tournaments/
+│   │   ├── page.tsx               # Public tournaments list (SSR, paginated)
+│   │   └── tournaments-client.tsx # Semester filter, pagination, grouped display
 │   ├── about/
 │   │   └── page.tsx               # About page (scoring, features, socials)
 │   ├── faq/
@@ -309,8 +356,10 @@ src/
 │   │   └── semesters/
 │   │       └── page.tsx           # Semester management (CRUD, date editing)
 │   └── api/
-│       └── leaderboard/
-│           └── route.ts           # Public leaderboard API (GET, no auth)
+│       ├── leaderboard/
+│       │   └── route.ts           # Public leaderboard API (GET, no auth)
+│       └── tournaments/
+│           └── route.ts           # Public tournaments API (GET, paginated, semester filter)
 ├── lib/
 │   ├── supabase/
 │   │   ├── client.ts              # Browser Supabase client

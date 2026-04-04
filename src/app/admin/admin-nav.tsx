@@ -93,7 +93,7 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
       <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
         <Link href="/" className="flex items-center gap-2 text-sm font-bold text-foreground hover:text-amber-400 transition-colors">
           <Image src="/icon.svg" alt="" width={28} height={28} className="h-7 w-7" />
-          Elon Esports Admin
+          Admin
         </Link>
         <button
           type="button"

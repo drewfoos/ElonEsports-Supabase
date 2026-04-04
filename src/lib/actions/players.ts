@@ -407,7 +407,7 @@ export async function mergePlayers(
     supabase.from('tournament_results').select('*').eq('player_id', keepId).limit(10000),
     supabase.from('tournament_results').select('*').eq('player_id', mergeId).limit(10000),
     supabase.from('players').select('startgg_player_ids').eq('id', keepId).single(),
-    supabase.from('players').select('startgg_player_ids').eq('id', mergeId).single(),
+    supabase.from('players').select('gamer_tag, startgg_player_ids').eq('id', mergeId).single(),
   ])
 
   if (keepStatusesRes.error) return { error: keepStatusesRes.error.message }
@@ -446,131 +446,152 @@ export async function mergePlayers(
     ])
   )
 
-  // 3. Process mergeId results — batch by operation type to minimize round trips
-  const toReassign: string[] = []                                  // mergeResult IDs → change player_id to keepId
-  const toDelete: string[] = []                                    // mergeResult IDs to remove (conflict)
-  const toUpdatePlacement: { id: string; placement: number }[] = [] // keepResult IDs that need better placement
-  const conflictTournamentIds: string[] = []                       // tournaments losing a participant
+  // 3. Process mergeId results — classify by operation type
+  const toReassign: string[] = []
+  const toDelete: string[] = []
+  const toUpdatePlacement: { id: string; placement: number; source_startgg_id: string | null }[] = []
 
   for (const mergeResult of mergeResults) {
     const existing = keepResultsByTournament.get(mergeResult.tournament_id)
 
     if (existing) {
       // Conflict: both players in same tournament — keep better placement
-      conflictTournamentIds.push(mergeResult.tournament_id)
       toDelete.push(mergeResult.id)
       if (mergeResult.placement < existing.placement) {
-        toUpdatePlacement.push({ id: existing.id, placement: mergeResult.placement })
+        toUpdatePlacement.push({
+          id: existing.id,
+          placement: mergeResult.placement,
+          source_startgg_id: mergeResult.source_startgg_id ?? null,
+        })
       }
     } else {
-      // No conflict: reassign to keepId
       toReassign.push(mergeResult.id)
     }
   }
 
-  // Execute all result mutations in parallel
-  const resultOps: PromiseLike<{ error: { message: string } | null }>[] = []
-  if (toReassign.length > 0) {
-    resultOps.push(
-      supabase.from('tournament_results').update({ player_id: keepId }).in('id', toReassign)
-    )
-  }
-  if (toDelete.length > 0) {
-    resultOps.push(
-      supabase.from('tournament_results').delete().in('id', toDelete)
-    )
-  }
-  for (const up of toUpdatePlacement) {
-    resultOps.push(
-      supabase.from('tournament_results').update({ placement: up.placement }).eq('id', up.id)
-    )
-  }
-  if (resultOps.length > 0) {
-    const results = await Promise.all(resultOps)
-    for (const r of results) {
-      if (r.error) return { error: `Merge failed during result reassignment: ${r.error.message}` }
-    }
-  }
-
-  // Note: we do NOT decrement total_participants on merge conflicts.
-  // The two players were the same person tracked twice — the tournament's actual
-  // participant count hasn't changed. The recalculation will correctly count
-  // elon_participants from the remaining results.
-
-  // 4. Merge player_semester_status: prefer is_elon_student = true (batched)
-  // Only upsert when merge player is Elon for a semester — this either:
-  //   - Promotes keep from false→true (or no row→true)
-  //   - Is a no-op if keep is already Elon for that semester
-  // When merge is NOT Elon, skip entirely — keep's existing row (or absence) is correct.
-  // Absence of a row = not Elon, so we never create explicit is_elon=false rows.
+  // Elon status upserts: only when merge player is Elon for a semester
   const statusUpserts = mergeStatuses
     .filter(s => s.is_elon_student)
     .map(status => ({
-      player_id: keepId,
       semester_id: status.semester_id,
       is_elon_student: true,
     }))
 
-  if (statusUpserts.length > 0) {
-    const { error: upsertError } = await supabase
-      .from('player_semester_status')
-      .upsert(statusUpserts, { onConflict: 'player_id,semester_id' })
-
-    if (upsertError) return { error: upsertError.message }
-  }
-
-  // 5. Reassign sets from mergeId → keepId
-  // First, delete sets where the two merged players played each other
-  // (would otherwise become winner=keepId AND loser=keepId — self-play)
-  const { error: selfPlayError } = await supabase
-    .from('sets')
-    .delete()
-    .or(`and(winner_player_id.eq.${keepId},loser_player_id.eq.${mergeId}),and(winner_player_id.eq.${mergeId},loser_player_id.eq.${keepId})`)
-
-  if (selfPlayError) return { error: `Merge failed during self-play cleanup: ${selfPlayError.message}` }
-
-  // Then reassign remaining sets
-  const setOps: PromiseLike<{ error: { message: string } | null }>[] = [
-    supabase.from('sets').update({ winner_player_id: keepId }).eq('winner_player_id', mergeId),
-    supabase.from('sets').update({ loser_player_id: keepId }).eq('loser_player_id', mergeId),
-  ]
-  const setResults = await Promise.all(setOps)
-  for (const r of setResults) {
-    if (r.error) return { error: `Merge failed during set reassignment: ${r.error.message}` }
-  }
-
-  // 6. Merge startgg_player_ids (deduplicated)
   const combinedIds = [...new Set([
     ...(keepPlayerRes.data.startgg_player_ids ?? []),
     ...(mergePlayerRes.data.startgg_player_ids ?? []),
   ])]
 
-  const { error: updateIdsError } = await supabase
-    .from('players')
-    .update({ startgg_player_ids: combinedIds })
-    .eq('id', keepId)
+  const mergedStartggIds = mergePlayerRes.data.startgg_player_ids ?? []
 
-  if (updateIdsError) {
-    return { error: updateIdsError.message }
+  // Execute ALL mutations atomically in a single Postgres transaction
+  const { error: rpcError } = await supabase.rpc('merge_players_atomic', {
+    p_keep_id: keepId,
+    p_merge_id: mergeId,
+    p_reassign_result_ids: toReassign,
+    p_delete_result_ids: toDelete,
+    p_update_placements: JSON.stringify(toUpdatePlacement),
+    p_status_upserts: JSON.stringify(statusUpserts),
+    p_combined_startgg_ids: combinedIds,
+    p_merged_gamer_tag: mergePlayerRes.data.gamer_tag,
+    p_merged_startgg_ids: mergedStartggIds,
+  })
+
+  if (rpcError) {
+    return { error: `Merge failed: ${rpcError.message}` }
   }
 
-  // 7. Delete the merged player record (cascades via FK)
-  const { error: deletePlayerError } = await supabase
-    .from('players')
-    .delete()
-    .eq('id', mergeId)
-
-  if (deletePlayerError) {
-    return { error: deletePlayerError.message }
+  // Recalculate ALL semesters (idempotent — safe even if interrupted)
+  const { data: allSems } = await supabase.from('semesters').select('id')
+  if (allSems && allSems.length > 0) {
+    await Promise.all(allSems.map(s => recalculateSemester(s.id, supabase)))
   }
-
-  // Parallel: recalculate all affected semesters
-  await Promise.all(
-    [...affectedSemesterIds].map(semId => recalculateSemester(semId, supabase))
-  )
 
   revalidatePath('/admin/players')
   updateTag('players-list')
   updateTag('player-profile')
   return { success: true }
+}
+
+// ---------------------------------------------------------------------------
+// Unmerge: split a start.gg ID back into its own player
+// ---------------------------------------------------------------------------
+
+export async function unmergePlayers(
+  playerId: string,
+  startggIdToSplit: string
+): Promise<{ success: true; newPlayerId: string; movedResults: number; movedSets: number; skippedResults: number } | { error: string }> {
+  await requireAdmin()
+
+  const supabase = createAdminClient()
+
+  // 1. Validate the player exists and has 2+ start.gg IDs
+  const { data: player, error: playerError } = await supabase
+    .from('players')
+    .select('gamer_tag, startgg_player_ids')
+    .eq('id', playerId)
+    .single()
+
+  if (playerError || !player) return { error: 'Player not found.' }
+
+  const ids = player.startgg_player_ids ?? []
+  if (!ids.includes(startggIdToSplit)) {
+    return { error: `Player does not have start.gg ID "${startggIdToSplit}".` }
+  }
+  if (ids.length < 2) {
+    return { error: 'Cannot unmerge — player only has one start.gg ID.' }
+  }
+
+  // 2. Look up merge history for original gamer tag
+  const { data: history } = await supabase
+    .from('merge_history')
+    .select('id, merged_gamer_tag, merged_startgg_ids')
+    .eq('keep_player_id', playerId)
+    .contains('merged_startgg_ids', [startggIdToSplit])
+    .order('merged_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  const restoredTag = history?.merged_gamer_tag ?? `Player-${startggIdToSplit}`
+  const remainingIds = ids.filter((id: string) => id !== startggIdToSplit)
+
+  // 3. Execute ALL mutations atomically in a single Postgres transaction
+  const { data: rpcResult, error: rpcError } = await supabase.rpc('unmerge_player_atomic', {
+    p_original_player_id: playerId,
+    p_startgg_id_to_split: startggIdToSplit,
+    p_restored_tag: restoredTag,
+    p_remaining_ids: remainingIds,
+    p_merge_history_id: history?.id ?? null,
+  })
+
+  if (rpcError) {
+    return { error: `Unmerge failed: ${rpcError.message}` }
+  }
+
+  const result = rpcResult as {
+    new_player_id: string
+    moved_results: number
+    moved_sets: number
+    skipped_results: number
+  }
+
+  // Recalculate ALL semesters (idempotent — safe even if interrupted)
+  const { data: allSemesters } = await supabase.from('semesters').select('id')
+  if (allSemesters && allSemesters.length > 0) {
+    await Promise.all(
+      allSemesters.map(s => recalculateSemester(s.id, supabase))
+    )
+  }
+
+  revalidatePath('/admin/players')
+  updateTag('players-list')
+  updateTag('player-profile')
+
+  return {
+    success: true,
+    newPlayerId: result.new_player_id,
+    movedResults: result.moved_results,
+    movedSets: result.moved_sets,
+    skippedResults: result.skipped_results,
+  }
 }

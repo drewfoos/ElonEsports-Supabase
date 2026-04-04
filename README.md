@@ -41,16 +41,17 @@ average = sum(scores) / tournaments_played
 
 ### Public
 
-- **Leaderboard** — Animated hero with floating Smash character renders, podium with trophy/medal icons, fireworks, semester selector, min-tournament slider
+- **Leaderboard** — Animated hero with floating Smash character renders, podium with trophy/medal icons, fireworks, semester selector, min-tournament slider, recent tournaments
 - **Player Directory** — Search, scatter plot, paginated card/table views (50/page), stats bar
 - **Player Profiles** — Stat cards, performance waveform, placement timeline, career journey, head-to-head records, tournament history
+- **Tournaments** — Paginated list of all start.gg tournaments, filterable by semester with grouped subheaders
 - **SEO** — OpenGraph, Twitter cards, dynamic metadata per player profile
 
 ### Admin
 
 - **start.gg Import** — Paste a URL, auto-detect singles events, preview standings, flag Elon students, confirm — scores recalculate automatically
 - **Manual Entry** — Bracket format selector, virtualized player picker, drag-and-drop placements
-- **Player Management** — Elon status toggle per semester, player merge (keeps best placement, migrates sets), start.gg account linking
+- **Player Management** — Elon status toggle per semester, atomic player merge/unmerge (keeps best placement, migrates sets, records history), start.gg account linking
 - **Semester Management** — Auto-create from academic calendar (Spring Jan–Jul, Fall Aug–Dec), overlap validation, tournament reassignment on date changes
 
 ### Under the Hood
@@ -60,6 +61,8 @@ average = sum(scores) / tournaments_played
 - **Deferred set imports** via `after()` — response returns in ~2s instead of ~15s
 - **Idempotency guards** on all create operations (duplicate name, tag, event ID, date range)
 - **No player deletion** — merge only, preserving tournament history integrity
+- **Atomic merge/unmerge** — Postgres RPC functions wrap all mutations in a single transaction
+- **Source tracking** — `source_startgg_id` on results and sets enables clean unmerge by start.gg identity
 
 <br />
 
@@ -112,6 +115,7 @@ npm run dev
 |:---|:---|
 | `localhost:3000` | Public leaderboard |
 | `localhost:3000/players` | Player directory |
+| `localhost:3000/tournaments` | Tournament list |
 | `localhost:3000/login` | Admin login |
 
 ### Deploy
@@ -130,8 +134,11 @@ src/
 │   ├── players/
 │   │   ├── page.tsx                # Player directory
 │   │   └── [playerId]/page.tsx     # Player profile (dynamic metadata)
+│   ├── tournaments/page.tsx        # Public tournaments (paginated, semester filter)
 │   ├── admin/                      # Dashboard, players, tournaments, semesters
-│   └── api/leaderboard/route.ts    # Public API
+│   └── api/
+│       ├── leaderboard/route.ts    # Public leaderboard API
+│       └── tournaments/route.ts    # Public tournaments API
 ├── lib/
 │   ├── scoring.ts                  # Scoring engine (parallel, batched, guarded)
 │   ├── startgg.ts                  # start.gg GraphQL client

@@ -4,12 +4,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   getPlayersWithStatus,
   getPlayersWithTournamentCount,
-  getAllPlayersPaginated,
-  createPlayer,
   updatePlayer,
   updatePlayerElonStatus,
-  updatePlayerStartggIds,
   mergePlayers,
+  unmergePlayers,
 } from '@/lib/actions/players'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -47,11 +45,11 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { Player, Semester } from '@/lib/types'
 
 export type PlayerWithStatus = Player & { is_elon_student: boolean }
-type AllPlayer = Player & { tournament_count: number; elon_semesters: string[] }
 type ElonFilter = 'all' | 'elon' | 'non-elon'
 
 const PAGE_SIZE = 50
@@ -65,7 +63,7 @@ function TableSkeleton({ rows = 6, cols = 4 }: { rows?: number; cols?: number })
   return (
     <div className="rounded-md border">
       <div className="border-b px-4 py-3">
-        <div className="flex gap-8">
+        <div className="flex gap-4 sm:gap-8">
           {Array.from({ length: cols }).map((_, i) => (
             <div key={i} className={`h-4 ${widths[i % widths.length]} animate-pulse rounded bg-muted`} />
           ))}
@@ -83,225 +81,7 @@ function TableSkeleton({ rows = 6, cols = 4 }: { rows?: number; cols?: number })
 }
 
 // ---------------------------------------------------------------------------
-// Tab button
-// ---------------------------------------------------------------------------
-
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-        active
-          ? 'bg-primary text-primary-foreground'
-          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-      }`}
-    >
-      {children}
-    </button>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// All Players Tab (paginated, server-side search)
-// ---------------------------------------------------------------------------
-
-const AllPlayerRow = React.memo(function AllPlayerRow({
-  player,
-  onEdit,
-  onManageIds,
-}: {
-  player: AllPlayer
-  onEdit: (p: Player) => void
-  onManageIds: (p: Player) => void
-}) {
-  return (
-    <TableRow>
-      <TableCell className="font-medium">{player.gamer_tag}</TableCell>
-      <TableCell>
-        <button
-          type="button"
-          onClick={() => onManageIds(player)}
-          className="flex cursor-pointer flex-wrap gap-1 rounded px-1 py-0.5 hover:bg-accent transition-colors"
-          title="Click to manage start.gg IDs"
-        >
-          {player.startgg_player_ids.length > 0 ? (
-            player.startgg_player_ids.map(id => (
-              <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
-            ))
-          ) : (
-            <span className="text-xs text-muted-foreground">+ Add ID</span>
-          )}
-        </button>
-      </TableCell>
-      <TableCell>
-        {player.elon_semesters.length > 0 ? (
-          <div className="flex items-center gap-1">
-            {player.elon_semesters.slice(0, 2).map(name => (
-              <Badge key={name} variant="default" className="text-xs">{name}</Badge>
-            ))}
-            {player.elon_semesters.length > 2 && (
-              <span
-                className="cursor-default rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                title={player.elon_semesters.join(', ')}
-              >
-                +{player.elon_semesters.length - 2}
-              </span>
-            )}
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">None</span>
-        )}
-      </TableCell>
-      <TableCell className="text-muted-foreground">
-        {player.tournament_count}
-      </TableCell>
-      <TableCell>
-        <Button variant="ghost" size="sm" onClick={() => onEdit(player)}>Edit</Button>
-      </TableCell>
-    </TableRow>
-  )
-})
-
-function AllPlayersTab({
-  onEdit,
-  onManageIds,
-  refreshKey,
-  elonFilter,
-}: {
-  onEdit: (p: Player) => void
-  onManageIds: (p: Player) => void
-  refreshKey: number
-  elonFilter: ElonFilter
-}) {
-  const [players, setPlayers] = useState<AllPlayer[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(0)
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [loading, setLoading] = useState(true)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
-
-  // Debounce search input (300ms)
-  const handleSearchChange = useCallback((value: string) => {
-    setSearch(value)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      setDebouncedSearch(value)
-      setPage(0)
-    }, 300)
-  }, [])
-
-  useEffect(() => {
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [])
-
-  // Reset page when filter changes
-  useEffect(() => { setPage(0) }, [elonFilter])
-
-  // Fetch page
-  const fetchPage = useCallback(async () => {
-    setLoading(true)
-    try {
-      const result = await getAllPlayersPaginated(
-        page, PAGE_SIZE, debouncedSearch || undefined, elonFilter
-      )
-      if (!('error' in result)) {
-        setPlayers(result.players)
-        setTotal(result.total)
-      }
-    } finally {
-      setLoading(false)
-    }
-  }, [page, debouncedSearch, elonFilter])
-
-  useEffect(() => {
-    fetchPage()
-  }, [fetchPage, refreshKey])
-
-  const totalPages = Math.ceil(total / PAGE_SIZE)
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Input
-          placeholder="Search all players..."
-          value={search}
-          onChange={e => handleSearchChange(e.target.value)}
-          className="max-w-xs"
-        />
-        <span className="text-sm text-muted-foreground">
-          {total} player{total !== 1 ? 's' : ''}
-        </span>
-      </div>
-
-      {loading ? (
-        <TableSkeleton />
-      ) : players.length === 0 ? (
-        <div className="flex justify-center py-12 text-muted-foreground">
-          {debouncedSearch || elonFilter !== 'all' ? 'No players match your filters' : 'No players yet'}
-        </div>
-      ) : (
-        <>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>GamerTag</TableHead>
-                  <TableHead>start.gg IDs</TableHead>
-                  <TableHead>Elon Semesters</TableHead>
-                  <TableHead>Tournaments</TableHead>
-                  <TableHead className="w-[80px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {players.map(p => (
-                  <AllPlayerRow
-                    key={p.id}
-                    player={p}
-                    onEdit={onEdit}
-                    onManageIds={onManageIds}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">
-                Page {page + 1} of {totalPages}
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page === 0}
-                  onClick={() => setPage(p => p - 1)}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages - 1}
-                  onClick={() => setPage(p => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Semester Players Tab (existing behavior)
+// Semester Player Row
 // ---------------------------------------------------------------------------
 
 const SemesterPlayerRow = React.memo(function SemesterPlayerRow({
@@ -320,7 +100,7 @@ const SemesterPlayerRow = React.memo(function SemesterPlayerRow({
   return (
     <TableRow>
       <TableCell className="font-medium">{player.gamer_tag}</TableCell>
-      <TableCell>
+      <TableCell className="hidden sm:table-cell">
         <button
           type="button"
           onClick={() => onManageIds(player)}
@@ -357,6 +137,103 @@ const SemesterPlayerRow = React.memo(function SemesterPlayerRow({
 })
 
 // ---------------------------------------------------------------------------
+// Merge panel (shared between Keep and Delete sides)
+// ---------------------------------------------------------------------------
+
+const MergePanel = React.memo(function MergePanel({
+  label,
+  badge,
+  badgeClass,
+  selectedId,
+  selectedPlayer,
+  onClear,
+  search,
+  onSearchChange,
+  filtered,
+  onSelect,
+  className,
+}: {
+  label: string
+  badge: string
+  badgeClass: string
+  selectedId: string
+  selectedPlayer?: Player & { tournament_count: number }
+  onClear: () => void
+  search: string
+  onSearchChange: (value: string) => void
+  filtered: (Player & { tournament_count: number })[]
+  onSelect: (id: string) => void
+  className?: string
+}) {
+  return (
+    <div className={cn('flex min-h-0 flex-col', className)}>
+      {/* Panel header */}
+      <div className="flex shrink-0 items-center gap-2 border-b bg-muted/30 px-3 py-2 sm:px-4">
+        <span className={cn('inline-flex h-5 w-5 items-center justify-center rounded text-xs font-bold', badgeClass)}>
+          {badge}
+        </span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </span>
+        {selectedId && selectedPlayer && (
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="truncate text-sm font-medium">{selectedPlayer.gamer_tag}</span>
+            <button
+              type="button"
+              onClick={onClear}
+              className="cursor-pointer rounded-full p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              aria-label="Change selection"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Search + list */}
+      {selectedId ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-4 text-center">
+          <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Player</div>
+          <div className="text-lg font-semibold">{selectedPlayer?.gamer_tag}</div>
+          <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Tournaments</div>
+          <div className="text-sm font-medium">
+            {selectedPlayer?.tournament_count ?? 0}
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClear} className="mt-1 cursor-pointer">
+            Change
+          </Button>
+        </div>
+      ) : (
+        <Command shouldFilter={false} className="flex-1 overflow-hidden rounded-none border-0">
+          <CommandInput
+            placeholder={`Search ${label.toLowerCase()} player...`}
+            value={search}
+            onValueChange={onSearchChange}
+          />
+          <div className="flex items-center px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <span className="flex-1">Name</span>
+            <span className="shrink-0"># Tourneys</span>
+          </div>
+          <CommandList className="styled-scroll max-h-none flex-1 overflow-y-auto">
+            <CommandEmpty>No players found.</CommandEmpty>
+            <CommandGroup>
+              {filtered.map(p => (
+                <CommandItem key={p.id} value={p.gamer_tag} onSelect={() => onSelect(p.id)} className="cursor-pointer">
+                  <span className="flex-1 truncate">{p.gamer_tag}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{p.tournament_count}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      )}
+    </div>
+  )
+})
+
+// ---------------------------------------------------------------------------
 // Main client component
 // ---------------------------------------------------------------------------
 
@@ -371,7 +248,6 @@ export default function PlayersClient({
   initialPlayers: PlayerWithStatus[]
   initialTotal: number
 }) {
-  const [tab, setTab] = useState<'semester' | 'all'>('semester')
   const [players, setPlayers] = useState<PlayerWithStatus[]>(initialPlayers)
   const [semTotal, setSemTotal] = useState(initialTotal)
   const [semPage, setSemPage] = useState(0)
@@ -380,15 +256,10 @@ export default function PlayersClient({
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
   const [elonFilter, setElonFilter] = useState<ElonFilter>('all')
   const semDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   // Dialog state
-  const [addOpen, setAddOpen] = useState(false)
-  const [addTag, setAddTag] = useState('')
-  const [addLoading, setAddLoading] = useState(false)
-
   const [editPlayer, setEditPlayer] = useState<Player | null>(null)
   const [editTag, setEditTag] = useState('')
   const [editLoading, setEditLoading] = useState(false)
@@ -397,8 +268,8 @@ export default function PlayersClient({
 
   const [idsPlayer, setIdsPlayer] = useState<Player | null>(null)
   const [idsValue, setIdsValue] = useState<string[]>([])
-  const [idsNewId, setIdsNewId] = useState('')
-  const [idsLoading, setIdsLoading] = useState(false)
+  const [unmergeTargetId, setUnmergeTargetId] = useState<string | null>(null)
+  const [unmergeLoading, setUnmergeLoading] = useState(false)
 
   const [mergeOpen, setMergeOpen] = useState(false)
   const [mergeKeepId, setMergeKeepId] = useState('')
@@ -449,10 +320,10 @@ export default function PlayersClient({
       initialLoad.current = false
       return
     }
-    if (selectedSemesterId && tab === 'semester') {
+    if (selectedSemesterId) {
       loadPlayers(selectedSemesterId, semPage, debouncedSearch, elonFilter)
     }
-  }, [selectedSemesterId, semPage, debouncedSearch, elonFilter, loadPlayers, tab])
+  }, [selectedSemesterId, semPage, debouncedSearch, elonFilter, loadPlayers])
 
   const semTotalPages = Math.ceil(semTotal / PAGE_SIZE)
 
@@ -465,7 +336,6 @@ export default function PlayersClient({
   const handleOpenIds = useCallback((player: Player) => {
     setIdsPlayer(player)
     setIdsValue([...player.startgg_player_ids])
-    setIdsNewId('')
   }, [])
 
   const handleElonToggle = useCallback(async (playerId: string, newValue: boolean) => {
@@ -495,26 +365,7 @@ export default function PlayersClient({
   }, [selectedSemesterId])
 
   function triggerRefresh() {
-    setRefreshKey(k => k + 1)
-    if (tab === 'semester' && selectedSemesterId) loadPlayers(selectedSemesterId, semPage, debouncedSearch, elonFilter)
-  }
-
-  async function handleAdd() {
-    if (!addTag.trim()) return
-    setAddLoading(true)
-    try {
-      const result = await createPlayer(addTag.trim())
-      if ('error' in result) {
-        toast.error(result.error)
-      } else {
-        toast.success(`Added "${addTag.trim()}"`)
-        setAddTag('')
-        setAddOpen(false)
-        triggerRefresh()
-      }
-    } finally {
-      setAddLoading(false)
-    }
+    if (selectedSemesterId) loadPlayers(selectedSemesterId, semPage, debouncedSearch, elonFilter)
   }
 
   async function handleEdit() {
@@ -534,35 +385,9 @@ export default function PlayersClient({
     }
   }
 
-  function handleAddId() {
-    const trimmed = idsNewId.trim()
-    if (!trimmed || idsValue.includes(trimmed)) return
-    setIdsValue([...idsValue, trimmed])
-    setIdsNewId('')
-  }
+  // Memoize merge dialog data
+  const playerMap = useMemo(() => new Map(allPlayers.map(p => [p.id, p])), [allPlayers])
 
-  function handleRemoveId(id: string) {
-    setIdsValue(idsValue.filter(v => v !== id))
-  }
-
-  async function handleSaveIds() {
-    if (!idsPlayer) return
-    setIdsLoading(true)
-    try {
-      const result = await updatePlayerStartggIds(idsPlayer.id, idsValue)
-      if ('error' in result) {
-        toast.error(result.error)
-      } else {
-        toast.success('start.gg IDs updated')
-        setIdsPlayer(null)
-        triggerRefresh()
-      }
-    } finally {
-      setIdsLoading(false)
-    }
-  }
-
-  // Memoize merge dialog filter results
   const filteredKeepPlayers = useMemo(() => {
     const lower = keepSearch.toLowerCase()
     return allPlayers
@@ -612,75 +437,55 @@ export default function PlayersClient({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Players</h1>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={openMergeDialog}>
-            Merge Players
-          </Button>
-          <Button size="sm" onClick={() => setAddOpen(true)}>Add Player</Button>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Players</h1>
+        <Button variant="outline" onClick={openMergeDialog}>
+          Merge Players
+        </Button>
       </div>
 
-      {/* Toolbar: tabs + filter */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2">
-        <div className="flex items-center gap-1 rounded-md bg-background p-0.5 ring-1 ring-border/50">
-          <TabButton active={tab === 'semester'} onClick={() => setTab('semester')}>
-            By Semester
-          </TabButton>
-          <TabButton active={tab === 'all'} onClick={() => setTab('all')}>
-            All Players
-          </TabButton>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Elon Affiliation</span>
-          <Select value={elonFilter} onValueChange={(v) => { if (v) setElonFilter(v as ElonFilter) }}>
-            <SelectTrigger className="h-8 w-[130px] text-xs">
-              <SelectValue>
-                {elonFilter === 'elon' ? 'Elon Only' : elonFilter === 'non-elon' ? 'Non-Elon' : 'All Players'}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all" label="All Players">All Players</SelectItem>
-              <SelectItem value="elon" label="Elon Only">Elon Only</SelectItem>
-              <SelectItem value="non-elon" label="Non-Elon">Non-Elon</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Select
+          value={selectedSemesterId}
+          onValueChange={(val) => { if (val) { setSelectedSemesterId(val); setSemPage(0) } }}
+        >
+          <SelectTrigger className="w-[160px] sm:w-[200px]">
+            <SelectValue placeholder="Select semester">
+              {semesters.find((s) => s.id === selectedSemesterId)?.name}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {semesters.map(s => (
+              <SelectItem key={s.id} value={s.id} label={s.name}>{s.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={elonFilter} onValueChange={(v) => { if (v) setElonFilter(v as ElonFilter) }}>
+          <SelectTrigger className="w-[130px]">
+            <SelectValue>
+              {elonFilter === 'elon' ? 'Elon Only' : elonFilter === 'non-elon' ? 'Non-Elon' : 'All Players'}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" label="All Players">All Players</SelectItem>
+            <SelectItem value="elon" label="Elon Only">Elon Only</SelectItem>
+            <SelectItem value="non-elon" label="Non-Elon">Non-Elon</SelectItem>
+          </SelectContent>
+        </Select>
+        <span className="text-sm text-muted-foreground">
+          {semTotal} player{semTotal !== 1 ? 's' : ''}
+        </span>
       </div>
+      <Input
+        placeholder="Search players..."
+        value={search}
+        onChange={e => handleSemSearch(e.target.value)}
+        className="w-full sm:max-w-xs"
+      />
 
-      {/* Semester tab */}
-      {tab === 'semester' && (
-        <>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-muted-foreground">Semester</Label>
-              <Select
-                value={selectedSemesterId}
-                onValueChange={(val) => { if (val) { setSelectedSemesterId(val); setSemPage(0) } }}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Select semester">
-                    {semesters.find((s) => s.id === selectedSemesterId)?.name}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {semesters.map(s => (
-                    <SelectItem key={s.id} value={s.id} label={s.name}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Input
-              placeholder="Search players..."
-              value={search}
-              onChange={e => handleSemSearch(e.target.value)}
-              className="max-w-xs"
-            />
-            <span className="text-sm text-muted-foreground">
-              {semTotal} player{semTotal !== 1 ? 's' : ''}
-            </span>
-          </div>
+      {/* Player list */}
+      <div>
 
           {loading ? (
             <TableSkeleton />
@@ -690,14 +495,14 @@ export default function PlayersClient({
             </div>
           ) : (
             <>
-              <div className="rounded-md border">
+              <div className="overflow-x-auto rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>GamerTag</TableHead>
-                      <TableHead>start.gg IDs</TableHead>
-                      <TableHead>Elon Student</TableHead>
-                      <TableHead className="w-[120px]">Actions</TableHead>
+                      <TableHead className="hidden sm:table-cell">start.gg IDs</TableHead>
+                      <TableHead>Elon</TableHead>
+                      <TableHead className="w-[80px] sm:w-[120px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -743,45 +548,7 @@ export default function PlayersClient({
               )}
             </>
           )}
-        </>
-      )}
-
-      {/* All Players tab */}
-      {tab === 'all' && (
-        <AllPlayersTab
-          onEdit={handleOpenEdit}
-          onManageIds={handleOpenIds}
-          refreshKey={refreshKey}
-          elonFilter={elonFilter}
-        />
-      )}
-
-      {/* Add Player Dialog */}
-      <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) setAddTag('') }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Player</DialogTitle>
-            <DialogDescription>Enter the player&apos;s gamer tag.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="add-tag">GamerTag</Label>
-              <Input
-                id="add-tag"
-                value={addTag}
-                onChange={e => setAddTag(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={handleAdd} disabled={addLoading || !addTag.trim()}>
-              {addLoading ? 'Adding...' : 'Add'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      </div>
 
       {/* Edit Player Dialog */}
       <Dialog open={editPlayer !== null} onOpenChange={(open) => { if (!open) { setEditPlayer(null); setEditTag('') } }}>
@@ -810,54 +577,95 @@ export default function PlayersClient({
         </DialogContent>
       </Dialog>
 
-      {/* Manage start.gg IDs Dialog */}
-      <Dialog open={idsPlayer !== null} onOpenChange={(open) => { if (!open) { setIdsPlayer(null); setIdsNewId('') } }}>
+      {/* start.gg IDs Dialog */}
+      <Dialog open={idsPlayer !== null} onOpenChange={(open) => { if (!open) { setIdsPlayer(null); setUnmergeTargetId(null) } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Manage start.gg IDs</DialogTitle>
+            <DialogTitle>start.gg IDs</DialogTitle>
             <DialogDescription>
-              Add or remove start.gg player IDs for &ldquo;{idsPlayer?.gamer_tag}&rdquo;.
-              These are used to match players during tournament imports.
+              start.gg player IDs linked to &ldquo;{idsPlayer?.gamer_tag}&rdquo;.
+              These are used to match this player during tournament imports.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-3 py-2">
             {idsValue.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="space-y-2">
                 {idsValue.map(id => (
-                  <Badge key={id} variant="secondary" className="gap-1 text-sm">
-                    {id}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveId(id)}
-                      className="ml-1 rounded-full hover:bg-destructive hover:text-destructive-foreground transition-colors"
-                      aria-label={`Remove ID ${id}`}
-                    >
-                      ×
-                    </button>
-                  </Badge>
+                  <div key={id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                    <span className="font-mono text-sm">{id}</span>
+                    {idsValue.length >= 2 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setUnmergeTargetId(id)}
+                        className="cursor-pointer text-xs"
+                      >
+                        Unmerge
+                      </Button>
+                    )}
+                  </div>
                 ))}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">No start.gg IDs linked yet.</p>
             )}
-            <div className="flex gap-2">
-              <Input
-                placeholder="Enter start.gg player ID"
-                value={idsNewId}
-                onChange={e => setIdsNewId(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleAddId() }}
-              />
-              <Button variant="outline" onClick={handleAddId} disabled={!idsNewId.trim()}>
-                Add
-              </Button>
-            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIdsPlayer(null)}>Cancel</Button>
-            <Button onClick={handleSaveIds} disabled={idsLoading}>
-              {idsLoading ? 'Saving...' : 'Save'}
-            </Button>
-          </DialogFooter>
+
+          {/* Unmerge confirmation */}
+          {unmergeTargetId && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/[0.03] p-3 space-y-2">
+              <p className="text-sm font-medium">
+                Unmerge start.gg ID <span className="font-mono">{unmergeTargetId}</span>?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                This will create a new player with this ID and move all tournament results
+                and sets that originated from it. Results without source tracking (from older
+                imports) will stay with the current player.
+              </p>
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setUnmergeTargetId(null)}
+                  disabled={unmergeLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={unmergeLoading}
+                  onClick={async () => {
+                    if (!idsPlayer) return
+                    setUnmergeLoading(true)
+                    try {
+                      const result = await unmergePlayers(idsPlayer.id, unmergeTargetId)
+                      if ('error' in result) {
+                        toast.error(result.error)
+                      } else {
+                        const parts = [`Unmerged — created new player`]
+                        if (result.movedResults > 0) parts.push(`${result.movedResults} result${result.movedResults !== 1 ? 's' : ''} moved`)
+                        if (result.movedSets > 0) parts.push(`${result.movedSets} set${result.movedSets !== 1 ? 's' : ''} moved`)
+                        if (result.skippedResults > 0) parts.push(`${result.skippedResults} result${result.skippedResults !== 1 ? 's' : ''} without source tracking kept`)
+                        toast.success(parts.join('. '))
+                        setIdsPlayer(null)
+                        setUnmergeTargetId(null)
+                        triggerRefresh()
+                      }
+                    } catch {
+                      toast.error('Unmerge failed')
+                    } finally {
+                      setUnmergeLoading(false)
+                    }
+                  }}
+                >
+                  {unmergeLoading ? 'Unmerging...' : 'Confirm Unmerge'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter showCloseButton />
         </DialogContent>
       </Dialog>
 
@@ -871,190 +679,79 @@ export default function PlayersClient({
           setMergeSearch('')
         }
       }}>
-        <DialogContent className="flex max-h-[92vh] w-full max-w-4xl flex-col gap-0 p-0 sm:max-w-4xl">
+        <DialogContent className="flex max-h-[92vh] w-[calc(100%-2rem)] sm:max-w-5xl flex-col gap-0 overflow-hidden p-0">
           {/* Header */}
-          <div className="space-y-1 border-b px-6 pt-6 pb-4">
-            <DialogTitle className="text-lg">Merge Players</DialogTitle>
-            <DialogDescription>
-              Select two players below. All tournament results from Player B transfer to Player A.
-              Duplicate tournament entries keep the better placement. Player B is deleted after merge.
+          <div className="shrink-0 space-y-1 border-b px-4 pt-4 pb-3 sm:px-6 sm:pt-6 sm:pb-4">
+            <DialogTitle className="text-base sm:text-lg">Merge Players</DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
+              Pick player A (keep) and B (delete). B&apos;s results transfer to A.
             </DialogDescription>
           </div>
 
-          {/* Merge flow visualization */}
+          {/* Merge flow visualization — compact on mobile */}
           {mergeKeepId && mergeMergeId && (() => {
-            const keepPlayer = allPlayers.find(p => p.id === mergeKeepId)
-            const mergePlayer = allPlayers.find(p => p.id === mergeMergeId)
+            const keepPlayer = playerMap.get(mergeKeepId)
+            const mergePlayer = playerMap.get(mergeMergeId)
             if (!keepPlayer || !mergePlayer) return null
             return (
-              <div className="border-b bg-muted/20 px-6 py-4">
-                <div className="flex items-center justify-center gap-4 text-sm">
-                  <div className="rounded-lg border bg-background px-4 py-2.5 text-center shadow-sm">
+              <div className="shrink-0 border-b bg-muted/20 px-4 py-2.5 sm:px-6 sm:py-4">
+                <div className="flex items-center justify-center gap-3 text-sm">
+                  <div className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 text-center shadow-sm sm:flex-none sm:px-4 sm:py-2.5">
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Keep</div>
-                    <div className="font-semibold text-foreground">{keepPlayer.gamer_tag}</div>
-                    <div className="text-xs text-muted-foreground">{keepPlayer.tournament_count} tournaments</div>
+                    <div className="truncate font-semibold text-foreground">{keepPlayer.gamer_tag}</div>
                   </div>
-                  <div className="flex flex-col items-center gap-0.5">
-                    <svg className="h-5 w-5 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                    </svg>
-                    <span className="text-[10px] text-muted-foreground">merge into</span>
-                  </div>
-                  <div className="rounded-lg border border-destructive/20 bg-destructive/[0.03] px-4 py-2.5 text-center shadow-sm">
+                  <svg className="h-4 w-4 shrink-0 text-muted-foreground/50 sm:h-5 sm:w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                  </svg>
+                  <div className="min-w-0 flex-1 rounded-lg border border-destructive/20 bg-destructive/[0.03] px-3 py-2 text-center shadow-sm sm:flex-none sm:px-4 sm:py-2.5">
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-destructive/70">Delete</div>
-                    <div className="font-semibold text-foreground">{mergePlayer.gamer_tag}</div>
-                    <div className="text-xs text-muted-foreground">{mergePlayer.tournament_count} tournaments</div>
+                    <div className="truncate font-semibold text-foreground">{mergePlayer.gamer_tag}</div>
                   </div>
                 </div>
               </div>
             )
           })()}
 
-          {/* Two-panel selection */}
-          <div className="grid min-h-0 flex-1 gap-0 overflow-hidden sm:grid-cols-2">
-            {/* Player A (keep) */}
-            <div className="flex flex-col border-b sm:border-b-0 sm:border-r">
-              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">A</div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Player to keep</span>
-                </div>
-                {mergeKeepId && (
-                  <button
-                    type="button"
-                    onClick={() => { setMergeKeepId(''); setKeepSearch('') }}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    Change
-                  </button>
-                )}
-              </div>
-              {mergeKeepId ? (() => {
-                const p = allPlayers.find(p => p.id === mergeKeepId)
-                if (!p) return null
-                return (
-                  <div className="flex flex-1 items-center justify-center p-6">
-                    <div className="text-center">
-                      <div className="mb-1 text-lg font-semibold">{p.gamer_tag}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
-                      </div>
-                      {p.startgg_player_ids.length > 0 && (
-                        <div className="mt-2 flex flex-wrap justify-center gap-1">
-                          {p.startgg_player_ids.map(id => (
-                            <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })() : (
-                <Command className="flex-1 border-0" shouldFilter={false}>
-                  <CommandInput
-                    placeholder="Search players..."
-                    value={keepSearch}
-                    onValueChange={setKeepSearch}
-                  />
-                  <CommandList className="styled-scroll !max-h-[50vh] !overflow-y-auto [scrollbar-width:thin!important]">
-                    <CommandEmpty>No players found.</CommandEmpty>
-                    <CommandGroup>
-                      {filteredKeepPlayers.map(p => (
-                        <CommandItem
-                          key={p.id}
-                          value={p.id}
-                          onSelect={() => setMergeKeepId(p.id)}
-                        >
-                          <div className="flex flex-col">
-                            <span className="font-medium">{p.gamer_tag}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
-                              {p.startgg_player_ids.length > 0 && (
-                                <> · {p.startgg_player_ids.join(', ')}</>
-                              )}
-                            </span>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              )}
-            </div>
-
-            {/* Player B (merge & delete) */}
-            <div className="flex flex-col">
-              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">B</div>
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Player to merge &amp; delete</span>
-                </div>
-                {mergeMergeId && (
-                  <button
-                    type="button"
-                    onClick={() => { setMergeMergeId(''); setMergeSearch('') }}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    Change
-                  </button>
-                )}
-              </div>
-              {mergeMergeId ? (() => {
-                const p = allPlayers.find(p => p.id === mergeMergeId)
-                if (!p) return null
-                return (
-                  <div className="flex flex-1 items-center justify-center p-6">
-                    <div className="text-center">
-                      <div className="mb-1 text-lg font-semibold">{p.gamer_tag}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
-                      </div>
-                      {p.startgg_player_ids.length > 0 && (
-                        <div className="mt-2 flex flex-wrap justify-center gap-1">
-                          {p.startgg_player_ids.map(id => (
-                            <Badge key={id} variant="secondary" className="text-xs">{id}</Badge>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })() : (
-                <Command className="flex-1 border-0" shouldFilter={false}>
-                  <CommandInput
-                    placeholder="Search players..."
-                    value={mergeSearch}
-                    onValueChange={setMergeSearch}
-                  />
-                  <CommandList className="styled-scroll !max-h-[50vh] !overflow-y-auto [scrollbar-width:thin!important]">
-                    <CommandEmpty>No players found.</CommandEmpty>
-                    <CommandGroup>
-                      {filteredMergePlayers.map(p => (
-                        <CommandItem
-                          key={p.id}
-                          value={p.id}
-                          onSelect={() => setMergeMergeId(p.id)}
-                        >
-                          <div className="flex flex-col">
-                            <span className="font-medium">{p.gamer_tag}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {p.tournament_count} tournament{p.tournament_count !== 1 ? 's' : ''}
-                              {p.startgg_player_ids.length > 0 && (
-                                <> · {p.startgg_player_ids.join(', ')}</>
-                              )}
-                            </span>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              )}
-            </div>
+          {/* Two-panel selection — stacked on mobile, side-by-side on desktop */}
+          <div className="grid min-h-0 flex-1 grid-rows-2 gap-0 overflow-hidden sm:grid-cols-2 sm:grid-rows-1">
+            <MergePanel
+              label="Keep"
+              badge="A"
+              badgeClass="bg-primary text-primary-foreground"
+              selectedId={mergeKeepId}
+              selectedPlayer={playerMap.get(mergeKeepId)}
+              onClear={() => { setMergeKeepId(''); setKeepSearch('') }}
+              search={keepSearch}
+              onSearchChange={setKeepSearch}
+              filtered={filteredKeepPlayers}
+              onSelect={setMergeKeepId}
+              className="border-b sm:border-b-0 sm:border-r"
+            />
+            <MergePanel
+              label="Delete"
+              badge="B"
+              badgeClass="bg-destructive text-destructive-foreground"
+              selectedId={mergeMergeId}
+              selectedPlayer={playerMap.get(mergeMergeId)}
+              onClear={() => { setMergeMergeId(''); setMergeSearch('') }}
+              search={mergeSearch}
+              onSearchChange={setMergeSearch}
+              filtered={filteredMergePlayers}
+              onSelect={setMergeMergeId}
+            />
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 border-t bg-muted/30 px-6 py-3">
+          {/* Warning + Footer */}
+          {mergeKeepId && mergeMergeId && mergeKeepId !== mergeMergeId && (
+            <div className="shrink-0 border-t bg-amber-500/5 px-4 py-2 sm:px-6">
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                <strong>Warning:</strong> Head-to-head sets between these two players will be permanently deleted (self-play).
+                If this merge is incorrect, unmerge can restore results and sets, but not deleted head-to-head matches.
+                Those would need to be re-imported from start.gg.
+              </p>
+            </div>
+          )}
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-muted/30 px-4 py-2.5 sm:px-6 sm:py-3">
             <Button variant="outline" size="sm" onClick={() => setMergeOpen(false)}>Cancel</Button>
             <Button
               size="sm"
@@ -1062,7 +759,7 @@ export default function PlayersClient({
               onClick={handleMerge}
               disabled={mergeLoading || !mergeKeepId || !mergeMergeId || mergeKeepId === mergeMergeId}
             >
-              {mergeLoading ? 'Merging...' : 'Merge Players'}
+              {mergeLoading ? 'Merging...' : 'Merge'}
             </Button>
           </div>
         </DialogContent>

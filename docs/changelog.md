@@ -4,6 +4,60 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v1.3.0 — Source Tracking, Atomic Merge/Unmerge & Public Tournaments
+
+### Source Tracking
+- **`source_startgg_id`** on `tournament_results` — records which start.gg player ID sourced each result
+- **`winner_source_startgg_id` / `loser_source_startgg_id`** on `sets` — tracks source per side
+- Import logic populates source IDs automatically for all new tournaments
+- **Backfill server action + UI** — admin can re-query start.gg API to backfill source IDs for previously imported tournaments
+
+### Atomic Merge/Unmerge
+- **`merge_players_atomic`** — PL/pgSQL function wraps all merge mutations (result reassignment, conflict resolution, self-play deletion, set reassignment, ID merge, history recording, player deletion) in a single Postgres transaction
+- **`unmerge_player_atomic`** — PL/pgSQL function creates new player, reassigns results/sets by source ID, copies semester status, cleans up merge history — all atomically
+- **`merge_history` table** — records original gamer_tag and startgg_player_ids for each merge, enabling clean unmerge with restored identity
+- Both operations safe against browser close / network loss — either all mutations commit or none do
+- **Unmerge UI** — "Unmerge" button next to each start.gg ID in the IDs dialog (only when player has 2+ IDs), with confirmation showing restored gamer_tag and warning about NULL-source rows
+
+### Merge Dialog Performance
+- **`React.memo`** on `MergePanel` — prevents cross-panel re-renders during search
+- **`shouldFilter={false}`** on cmdk `Command` — disables internal fuzzy-match (external `useMemo` handles filtering), eliminating double-filter lag
+
+### Public Tournaments Page (`/tournaments`)
+- **SSR with pagination** — first page rendered server-side via `unstable_cache` (120s TTL), subsequent pages via `/api/tournaments` API route
+- **Semester filter** — dropdown to filter by semester, API-side filtering
+- **Grouped by semester** — subheader labels for each semester section (always shown, not just in "All" mode)
+- **Minimal data** — only 6 columns selected, start.gg tournaments only (no manual)
+- **Navigation** — added "Tournaments" link to both desktop nav and mobile hamburger menu
+
+### Leaderboard Updates
+- **Controls bar** moved from hero section into `<main>` as a rounded card with border
+- **Recent Tournaments** section below leaderboard table — 5 most recent start.gg tournaments with links, "View all" navigates to `/tournaments`
+
+### Admin UI Improvements
+- **Semesters** — replaced table with card layout (colored accent strip: primary=current, blue=future, gray=past); works better on both mobile and desktop
+- **Tournaments** — start.gg tournament names link to `start.gg/tournament/{slug}` with hover underline; consistent two-line format for both start.gg and manual rows
+- **Dashboard** — recent tournaments aligned with fixed-width columns (`w-16` Elon count, `w-14` date), name truncated with ellipsis
+- **Import dialog** — mobile-friendly width (`w-[calc(100%-2rem)]` instead of `w-full`)
+- **Dark mode date input** — `filter: invert(1)` on calendar picker icon for visibility
+
+### Database Migration
+- `supabase/migrations/20260403000000_source_tracking.sql` — adds source tracking columns and `merge_history` table
+- `supabase/migrations/20260403100000_atomic_merge_unmerge.sql` — PL/pgSQL functions for atomic merge/unmerge
+
+### Integration Tests
+- `scripts/test-merge-unmerge.ts` — end-to-end test creating test players, tournaments, results with source tracking, sets, then testing merge (17 assertions) and unmerge (16 assertions) with cleanup
+
+### New Files
+- `src/app/tournaments/page.tsx` — Public tournaments page (Server Component)
+- `src/app/tournaments/tournaments-client.tsx` — Tournaments list with filter/pagination
+- `src/app/api/tournaments/route.ts` — Public tournaments API endpoint
+- `supabase/migrations/20260403000000_source_tracking.sql` — Source tracking migration
+- `supabase/migrations/20260403100000_atomic_merge_unmerge.sql` — Atomic RPC functions
+- `scripts/test-merge-unmerge.ts` — Merge/unmerge integration test
+
+---
+
 ## v1.2.0 — Mobile Responsiveness & Polish
 
 ### Mobile Navigation

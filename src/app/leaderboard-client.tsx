@@ -181,11 +181,13 @@ export function LeaderboardClient({
   semesters,
   initialSemesterId,
   initialEntries,
+  recentTournaments,
   fetchedAt,
 }: {
   semesters: Semester[]
   initialSemesterId: string
   initialEntries: LeaderboardEntry[]
+  recentTournaments: { name: string; date: string; startgg_slug: string }[]
   fetchedAt: number
 }) {
   const [selectedSemesterId, setSelectedSemesterId] = useState(initialSemesterId)
@@ -262,9 +264,9 @@ export function LeaderboardClient({
         </p>
       </HeroGeometric>
 
-      {/* Controls bar */}
-      <div className="relative z-10 border-b border-white/[0.06]">
-        <div className="mx-auto flex max-w-5xl items-end justify-between gap-4 px-4 py-5 sm:py-4">
+      <main className="relative z-10 mx-auto w-full max-w-5xl flex-1 rounded-t-3xl bg-white/[0.02] px-4 pt-8 pb-16 sm:px-6 sm:pt-10 sm:pb-20">
+        {/* Controls bar */}
+        <div className="mb-8 flex items-end justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-4 sm:mb-10 sm:px-5">
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-medium uppercase tracking-wider text-white/25">
               Semester
@@ -306,9 +308,6 @@ export function LeaderboardClient({
             </div>
           </div>
         </div>
-      </div>
-
-      <main className="relative z-10 mx-auto w-full max-w-5xl flex-1 rounded-t-3xl bg-white/[0.02] px-4 py-10 sm:px-6">
         {/* Loading state */}
         {loading && (
           <div className="flex flex-col items-center gap-4 py-20">
@@ -422,6 +421,41 @@ export function LeaderboardClient({
           </div>
 
           </>
+        )}
+
+        {/* Recent Tournaments */}
+        {!loading && recentTournaments.length > 0 && (
+          <div className="mt-10 sm:mt-12">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-medium uppercase tracking-wider text-white/25">
+                Recent Tournaments
+              </h2>
+              <Link href="/tournaments" className="text-xs text-white/30 transition-colors hover:text-white/60">
+                View all
+              </Link>
+            </div>
+            <div className="flex flex-col gap-2">
+              {recentTournaments.map((t) => (
+                <a
+                  key={t.startgg_slug}
+                  href={`https://start.gg/tournament/${t.startgg_slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 transition-colors hover:bg-white/[0.05]"
+                >
+                  <span className="truncate text-sm font-medium text-white/70 group-hover:text-white">
+                    {t.name}
+                  </span>
+                  <span className="shrink-0 ml-4 text-xs text-white/25">
+                    {new Date(t.date + 'T00:00:00').toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </span>
+                </a>
+              ))}
+            </div>
+          </div>
         )}
       </main>
 

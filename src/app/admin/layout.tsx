@@ -29,7 +29,7 @@ export default async function AdminLayout({
       <main className="flex-1 overflow-auto">
         {/* Spacer for mobile top bar */}
         <div className="h-14 md:hidden" />
-        <div className="p-6">{children}</div>
+        <div className="max-w-5xl p-4 sm:p-6">{children}</div>
       </main>
     </div>
   )

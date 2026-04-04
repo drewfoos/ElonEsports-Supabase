@@ -97,7 +97,7 @@ function TableSkeleton({ rows = 5, cols = 6 }: { rows?: number; cols?: number })
   return (
     <div className="rounded-md border">
       <div className="border-b px-4 py-3">
-        <div className="flex gap-8">
+        <div className="flex gap-4 sm:gap-8">
           {Array.from({ length: cols }).map((_, i) => (
             <div key={i} className={`h-4 ${widths[i % widths.length]} animate-pulse rounded bg-muted`} />
           ))}
@@ -227,7 +227,7 @@ export default function TournamentsClient({
       </div>
 
       {/* Semester filter + recalculate */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <label className="text-sm font-medium text-muted-foreground">
           Semester
         </label>
@@ -235,7 +235,7 @@ export default function TournamentsClient({
           value={selectedSemesterId}
           onValueChange={(val) => { if (val) setSelectedSemesterId(val) }}
         >
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-[160px] sm:w-[200px]">
             <SelectValue placeholder="Select semester">
               {semesters.find((s) => s.id === selectedSemesterId)?.name}
             </SelectValue>
@@ -261,7 +261,7 @@ export default function TournamentsClient({
                 Recalculating...
               </>
             ) : (
-              'Recalculate Semester'
+              'Recalculate'
             )}
           </Button>
         </span>
@@ -278,48 +278,62 @@ export default function TournamentsClient({
           </Link>
         </div>
       ) : (
-        <div className="rounded-md border">
-          <Table>
+        <div className="rounded-md border [&_[data-slot=table-container]]:overflow-hidden">
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead className="text-right">Elon</TableHead>
-                <TableHead className="text-right">Weight</TableHead>
-                <TableHead className="w-[80px]" />
+                <TableHead className="w-[40%]">Name</TableHead>
+                <TableHead className="hidden w-24 sm:table-cell">Date</TableHead>
+                <TableHead className="hidden w-[70px] sm:table-cell">Source</TableHead>
+                <TableHead className="w-11 text-right">Total</TableHead>
+                <TableHead className="w-10 text-right">Elon</TableHead>
+                <TableHead className="hidden w-16 sm:table-cell text-right">Weight</TableHead>
+                <TableHead className="w-[76px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {tournaments.map((t) => (
                 <TableRow key={t.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleInspect(t)}>
-                  <TableCell>
-                    <div className="font-medium">{t.name}</div>
-                    {t.startgg_event_id && (
-                      <div className="text-xs text-muted-foreground">Event #{t.startgg_event_id}</div>
+                  <TableCell className="max-w-0 overflow-hidden">
+                    {t.startgg_slug ? (
+                      <a
+                        href={`https://start.gg/tournament/${t.startgg_slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group block min-w-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="block truncate font-medium group-hover:underline">{t.name}</span>
+                        <span className="block text-xs text-muted-foreground">start.gg</span>
+                      </a>
+                    ) : (
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{t.name}</div>
+                        <div className="text-xs text-muted-foreground">Manual</div>
+                      </div>
                     )}
                   </TableCell>
-                  <TableCell>{formatDate(t.date)}</TableCell>
-                  <TableCell>
+                  <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">{formatDate(t.date)}</TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     <Badge
                       variant={
                         t.source === 'startgg' ? 'default' : 'secondary'
                       }
+                      className="text-[10px]"
                     >
                       {t.source === 'startgg' ? 'start.gg' : 'Manual'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums">
                     {t.total_participants}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right tabular-nums">
                     {t.elon_participants}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="hidden sm:table-cell text-right tabular-nums text-sm">
                     {t.weight.toFixed(4)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-right">
                     <Button
                       variant="destructive"
                       size="sm"

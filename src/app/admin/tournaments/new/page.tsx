@@ -1030,7 +1030,7 @@ function StartggImportTab() {
 
       {/* Preview Dialog */}
       <Dialog open={preview !== null} onOpenChange={(open) => { if (!open) handleReset() }}>
-        <DialogContent className="flex max-h-[92vh] w-full max-w-3xl flex-col gap-0 p-0 sm:max-w-3xl">
+        <DialogContent className="flex max-h-[92vh] w-[calc(100%-2rem)] max-w-3xl flex-col gap-0 p-0 sm:max-w-3xl">
           {/* Header */}
           <div className="space-y-3 border-b px-6 pt-6 pb-4">
             <div>

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import Image from 'next/image'
 import { Badge } from '@/components/ui/badge'
-import { Menu, Trophy, Users, Info, HelpCircle, ChevronRight } from 'lucide-react'
+import { Menu, Trophy, Users, Swords, Info, HelpCircle, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import {
   Sheet,
@@ -17,6 +17,7 @@ import {
 const navLinks = [
   { href: '/', label: 'Rankings', icon: Trophy },
   { href: '/players', label: 'Players', icon: Users },
+  { href: '/tournaments', label: 'Tournaments', icon: Swords },
   { href: '/about', label: 'About', icon: Info },
   { href: '/faq', label: 'FAQ', icon: HelpCircle },
 ] as const
@@ -103,6 +104,9 @@ export function SiteHeader() {
         <div className="hidden items-center gap-2 sm:flex">
           <Link href="/players" className="rounded-md px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.06] hover:text-white">
             Players
+          </Link>
+          <Link href="/tournaments" className="rounded-md px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.06] hover:text-white">
+            Tournaments
           </Link>
           <Link href="/about" className="rounded-md px-2.5 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/[0.06] hover:text-white">
             About
