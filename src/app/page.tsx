@@ -10,9 +10,9 @@ export const metadata: Metadata = {
   description:
     'Live Smash Bros. Ultimate power rankings for Elon University Esports. See who tops the leaderboard each semester.',
   openGraph: {
-    title: 'Power Rankings | Elon Esports Smash PR',
+    title: 'Smash Bros. Power Rankings — Elon University Esports Club',
     description:
-      'Live Smash Bros. Ultimate power rankings for Elon University Esports.',
+      'Live Super Smash Bros. Ultimate power rankings for Elon University Esports. Weighted placement scoring across weeklies and regionals — see who tops the leaderboard each semester.',
   },
 }
 
