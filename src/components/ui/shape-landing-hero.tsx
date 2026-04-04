@@ -128,7 +128,7 @@ function HeroGeometric({
                     gradient="from-indigo-500/[0.15]"
                     className="left-[-10%] md:left-[-5%] top-[15%] md:top-[20%]"
                     characterImg="/characters/mario.webp"
-                    imgSizes="(max-width: 768px) 250px, 600px"
+                    imgSizes="(max-width: 768px) 220px, 400px"
                 />
 
                 <ElegantShape
@@ -140,7 +140,7 @@ function HeroGeometric({
                     className="right-[-5%] md:right-[0%] top-[70%] md:top-[75%]"
                     characterImg="/characters/captain-falcon.webp"
                     imgClassName="object-center scale-[2] translate-y-[45%]"
-                    imgSizes="(max-width: 768px) 200px, 500px"
+                    imgSizes="(max-width: 768px) 200px, 384px"
                 />
 
                 <ElegantShape
@@ -162,7 +162,7 @@ function HeroGeometric({
                     gradient="from-amber-500/[0.15]"
                     className="right-[15%] md:right-[20%] top-[10%] md:top-[15%]"
                     characterImg="/characters/pikachu.webp"
-                    imgSizes="(max-width: 768px) 100px, 200px"
+                    imgSizes="(max-width: 768px) 80px, 200px"
                 />
 
                 <ElegantShape
