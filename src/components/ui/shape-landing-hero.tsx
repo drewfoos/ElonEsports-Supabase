@@ -76,6 +76,7 @@ function ElegantShape({
                             src={characterImg}
                             alt=""
                             fill
+                            loading="eager"
                             className={cn("object-contain opacity-40 mix-blend-luminosity scale-125", imgClassName)}
                             sizes="(max-width: 768px) 200px, 400px"
                         />
