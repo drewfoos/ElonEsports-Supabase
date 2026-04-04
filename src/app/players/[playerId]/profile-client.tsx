@@ -104,9 +104,9 @@ export function ProfileClient({ profile, fetchedAt }: { profile: PlayerProfile; 
             </div>
 
             {/* Stat cards — 3 across */}
-            <div className="mt-7 grid grid-cols-3 gap-3">
+            <div className="mt-7 grid grid-cols-3 gap-2 sm:gap-3">
               <StatCard
-                label="Current Rank"
+                label="Rank"
                 value={currentRank ? `#${currentRank}` : '—'}
                 sub={latestScore ? latestScore.semester_name : undefined}
                 icon={<Trophy className="h-5 w-5" />}
@@ -114,14 +114,14 @@ export function ProfileClient({ profile, fetchedAt }: { profile: PlayerProfile; 
                 glowColor="rgba(251,191,36,0.15)"
               />
               <StatCard
-                label="Best Placement"
+                label="Best Place"
                 value={bestPlacement !== null ? ordinal(bestPlacement) : '—'}
                 icon={<Medal className="h-5 w-5" />}
                 color="text-orange-400"
                 glowColor="rgba(251,146,60,0.15)"
               />
               <StatCard
-                label="Set Record"
+                label="Sets"
                 value={totalSets > 0 ? `${totalWins}–${totalSets - totalWins}` : '—'}
                 sub={winPct !== null ? `${winPct}% win rate` : undefined}
                 icon={<Swords className="h-5 w-5" />}
@@ -316,7 +316,7 @@ function StatCard({
 }) {
   return (
     <div
-      className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 transition-all duration-200 hover:border-white/[0.12]"
+      className="group relative overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.03] px-2.5 py-3 transition-all duration-200 hover:border-white/[0.12] sm:p-4"
     >
       {/* Subtle top accent line */}
       <div
@@ -389,14 +389,14 @@ function HeadToHeadTable({
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
-      <Table>
+      <Table className="table-fixed w-full">
         <TableHeader>
           <TableRow className="border-white/[0.06] hover:bg-transparent">
             <SortableHead label="Opponent" sortKey="opponent" currentKey={sortKey} asc={sortAsc} onSort={handleSort} />
-            <SortableHead label="Wins" sortKey="wins" currentKey={sortKey} asc={sortAsc} onSort={handleSort} center />
-            <SortableHead label="Losses" sortKey="losses" currentKey={sortKey} asc={sortAsc} onSort={handleSort} center />
-            <SortableHead label="Total" sortKey="total" currentKey={sortKey} asc={sortAsc} onSort={handleSort} center className="hidden sm:table-cell" />
-            <SortableHead label="Win Rate" sortKey="winrate" currentKey={sortKey} asc={sortAsc} onSort={handleSort} right />
+            <SortableHead label="W" sortKey="wins" currentKey={sortKey} asc={sortAsc} onSort={handleSort} center className="w-12 sm:w-16" />
+            <SortableHead label="L" sortKey="losses" currentKey={sortKey} asc={sortAsc} onSort={handleSort} center className="w-12 sm:w-16" />
+            <SortableHead label="Total" sortKey="total" currentKey={sortKey} asc={sortAsc} onSort={handleSort} center className="hidden w-16 sm:table-cell" />
+            <SortableHead label="Win %" sortKey="winrate" currentKey={sortKey} asc={sortAsc} onSort={handleSort} right className="w-20 sm:w-28" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -405,10 +405,10 @@ function HeadToHeadTable({
             const pct = total > 0 ? (h.wins / total) * 100 : 0
             return (
               <TableRow key={h.opponent_id} className="border-white/[0.04] hover:bg-white/[0.03]">
-                <TableCell>
+                <TableCell className="max-w-0">
                   <Link
                     href={`/players/${h.opponent_id}`}
-                    className="font-medium text-white/80 transition-colors hover:text-white"
+                    className="block truncate font-medium text-white/80 transition-colors hover:text-white"
                   >
                     {h.opponent_tag}
                   </Link>
@@ -469,7 +469,7 @@ function SortableHead({
     <TableHead className={`${align} ${className ?? ''}`}>
       <button
         onClick={() => onSort(sortKey)}
-        className={`inline-flex items-center gap-1 text-white/30 transition-colors hover:text-white/60 ${center ? 'mx-auto' : ''} ${right ? 'ml-auto' : ''}`}
+        className={`inline-flex cursor-pointer items-center gap-1 text-white/30 transition-colors hover:text-white/60 ${center ? 'mx-auto' : ''} ${right ? 'ml-auto' : ''}`}
       >
         {label}
         {active ? (
@@ -532,19 +532,19 @@ function TournamentHistoryTable({
               className="border-white/[0.04] hover:bg-white/[0.03]"
               style={{ animation: `fadeSlideIn 0.3s ease-out ${Math.min(i * 0.02, 0.5)}s both` }}
             >
-              <TableCell>
-                <div>
+              <TableCell className="max-w-[200px] sm:max-w-none">
+                <div className="min-w-0">
                   {r.startgg_slug ? (
                     <a
                       href={`https://www.start.gg/tournament/${r.startgg_slug}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-medium text-white/80 transition-colors hover:text-white hover:underline hover:underline-offset-2"
+                      className="block truncate font-medium text-white/80 transition-colors hover:text-white hover:underline hover:underline-offset-2"
                     >
                       {r.tournament_name}
                     </a>
                   ) : (
-                    <span className="font-medium text-white/80">{r.tournament_name}</span>
+                    <span className="block truncate font-medium text-white/80">{r.tournament_name}</span>
                   )}
                   <span className="block text-xs text-white/25 sm:hidden">
                     {formatShortDate(r.tournament_date)}

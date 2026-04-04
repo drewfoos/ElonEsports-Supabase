@@ -264,7 +264,7 @@ export function LeaderboardClient({
 
       {/* Controls bar */}
       <div className="relative z-10 border-b border-white/[0.06]">
-        <div className="mx-auto grid max-w-5xl grid-cols-1 gap-4 px-4 py-5 sm:grid-cols-2 sm:py-4">
+        <div className="mx-auto flex max-w-5xl items-end justify-between gap-4 px-4 py-5 sm:py-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-medium uppercase tracking-wider text-white/25">
               Semester
@@ -273,7 +273,7 @@ export function LeaderboardClient({
               value={selectedSemesterId}
               onValueChange={handleSemesterChange}
             >
-              <SelectTrigger className="w-full sm:w-52 border-white/[0.08] bg-white/[0.03] text-white/80 [&>svg]:text-white/30">
+              <SelectTrigger className="w-40 sm:w-52 border-white/[0.08] bg-white/[0.03] text-white/80 [&>svg]:text-white/30">
                 <SelectValue placeholder="Select semester">
                   {semesters.find((s) => s.id === selectedSemesterId)?.name}
                 </SelectValue>
@@ -288,12 +288,12 @@ export function LeaderboardClient({
             </Select>
           </div>
 
-          <div className="flex flex-col gap-1.5 sm:items-end">
+          <div className="flex flex-col gap-1.5 items-end">
             <label className="text-[11px] font-medium uppercase tracking-wider text-white/25">
               Min. Tournaments:{' '}
               <span className="text-white/50 font-mono">{minTournaments}</span>
             </label>
-            <div className="w-full sm:w-52">
+            <div className="w-32 sm:w-52">
               <input
                 type="range"
                 min={1}

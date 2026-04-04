@@ -78,19 +78,19 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
             <span className="flex items-center gap-1.5">
               <Gamepad2 className="h-4 w-4 text-indigo-400/60" />
               <span className="font-mono text-white/60">{players.length}</span>
-              <span className="hidden sm:inline">Players</span>
+              Players
             </span>
             <span className="h-3.5 w-px bg-white/[0.08]" />
             <span className="flex items-center gap-1.5">
               <Swords className="h-4 w-4 text-rose-400/60" />
               <span className="font-mono text-white/60">{totalSets}</span>
-              <span className="hidden sm:inline">Sets</span>
+              Sets
             </span>
             <span className="h-3.5 w-px bg-white/[0.08]" />
             <span className="flex items-center gap-1.5">
               <Trophy className="h-4 w-4 text-amber-400/60" />
               <span className="font-mono text-white/60">{championsCount}</span>
-              <span className="hidden sm:inline">Champions</span>
+              <span className="sm:hidden">Wins</span><span className="hidden sm:inline">Champions</span>
             </span>
           </div>
 
@@ -130,8 +130,8 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
               <LastUpdated fetchedAt={fetchedAt} tag="players-list" />
             </div>
 
-            {/* Scatter plot */}
-            <div className="mb-6">
+            {/* Scatter plot — hidden on mobile */}
+            <div className="mb-6 hidden sm:block">
               <PlayerScatter players={filtered} />
             </div>
 

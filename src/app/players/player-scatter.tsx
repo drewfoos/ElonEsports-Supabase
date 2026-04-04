@@ -65,6 +65,11 @@ export function PlayerScatter({ players }: { players: PlayerListItem[] }) {
           viewBox={`0 0 ${W} ${H}`}
           className="w-full"
           style={{ maxHeight: 340 }}
+          onTouchStart={(e) => {
+            if ((e.target as SVGElement).tagName !== 'circle') {
+              setHoveredId(null)
+            }
+          }}
         >
           <defs>
             {/* Glow filter for dots */}
@@ -213,6 +218,12 @@ export function PlayerScatter({ players }: { players: PlayerListItem[] }) {
                     className="cursor-pointer transition-all duration-150"
                     onMouseEnter={() => setHoveredId(p.id)}
                     onMouseLeave={() => setHoveredId(null)}
+                    onTouchStart={(e) => {
+                      if (hoveredId !== p.id) {
+                        e.preventDefault()
+                        setHoveredId(p.id)
+                      }
+                    }}
                   />
                 </Link>
               </g>

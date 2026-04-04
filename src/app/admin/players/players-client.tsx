@@ -122,7 +122,7 @@ const AllPlayerRow = React.memo(function AllPlayerRow({
         <button
           type="button"
           onClick={() => onManageIds(player)}
-          className="flex flex-wrap gap-1 rounded px-1 py-0.5 hover:bg-accent transition-colors"
+          className="flex cursor-pointer flex-wrap gap-1 rounded px-1 py-0.5 hover:bg-accent transition-colors"
           title="Click to manage start.gg IDs"
         >
           {player.startgg_player_ids.length > 0 ? (
@@ -324,7 +324,7 @@ const SemesterPlayerRow = React.memo(function SemesterPlayerRow({
         <button
           type="button"
           onClick={() => onManageIds(player)}
-          className="flex flex-wrap gap-1 rounded px-1 py-0.5 hover:bg-accent transition-colors"
+          className="flex cursor-pointer flex-wrap gap-1 rounded px-1 py-0.5 hover:bg-accent transition-colors"
           title="Click to manage start.gg IDs"
         >
           {player.startgg_player_ids.length > 0 ? (

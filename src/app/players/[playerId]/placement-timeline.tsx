@@ -1,58 +1,83 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import type { PlayerProfile } from '@/lib/actions/player-profile'
 
 /**
  * Placement timeline — HUD chart showing placement percentile over time
  * with field-size context bars along the bottom strip.
  * Top = best (1st), bottom = worst. Dot color reflects percentile tier.
+ * Responsive: viewBox matches container width so text stays readable.
  */
 
-const W = 720
-const H = 360
-const PAD = { top: 24, right: 24, bottom: 64, left: 58 }
-const PLOT_W = W - PAD.left - PAD.right
-const PLOT_H = H - PAD.top - PAD.bottom
-const BAR_H = 36 // field-size strip height
-const GAP = 14
+const PAD_TOP = 24
+const PAD_RIGHT = 16
+const PAD_BOTTOM = 52
+const BAR_H = 28
+const GAP = 10
 
 export function PlacementTimeline({
   results,
 }: {
   results: PlayerProfile['tournamentResults']
 }) {
-  // Results arrive newest-first — reverse to chronological
-  const chrono = useMemo(() => [...results].reverse(), [results])
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(0)
+  const [hovIdx, setHovIdx] = useState<number | null>(null)
 
-  const chartH = PLOT_H - BAR_H - GAP
-
-  const points = useMemo(() => {
-    if (chrono.length < 2) return []
-    const maxField = Math.max(...chrono.map((r) => r.total_participants), 1)
-
-    return chrono.map((r, i) => {
-      const pct =
-        r.total_participants > 1
-          ? (r.placement - 1) / (r.total_participants - 1)
-          : 0
-      const clampedPct = Math.max(0, Math.min(1, pct))
-      const x = PAD.left + (i / (chrono.length - 1)) * PLOT_W
-      const y = PAD.top + clampedPct * chartH
-      // Field-size bar
-      const barHeight = (r.total_participants / maxField) * BAR_H
-      const barY = PAD.top + chartH + GAP + (BAR_H - barHeight)
-      return { ...r, pct: clampedPct, x, y, barHeight, barY }
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      setWidth(Math.round(entry.contentRect.width))
     })
-  }, [chrono, chartH])
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
-  if (points.length < 2) return null
+  const MAX_EVENTS = 25
+  const allChrono = useMemo(() => [...results].reverse(), [results])
+  const capped = allChrono.length > MAX_EVENTS
+  const chrono = capped ? allChrono.slice(allChrono.length - MAX_EVENTS) : allChrono
+  if (chrono.length < 2) return null
+
+  // Responsive dimensions — taller on mobile so axis labels have room
+  const W = width || 360
+  const isMobile = W < 500
+  const aspect = isMobile ? 0.7 : 0.5
+  const padLeft = isMobile ? 36 : 44
+  const H = Math.round(W * aspect)
+  const PLOT_W = W - padLeft - PAD_RIGHT
+  const PLOT_H = H - PAD_TOP - PAD_BOTTOM
+  const chartH = PLOT_H - BAR_H - GAP
+  const fontSize = isMobile ? 12 : 11
+  const n = chrono.length
+
+  const maxField = Math.max(...chrono.map((r) => r.total_participants), 1)
+
+  // Scale dot size down when there are many events
+  const dotR = n > 20 ? 2.5 : n > 12 ? 3 : 4
+  const glowR = dotR * 2
+
+  const points = chrono.map((r, i) => {
+    const pct =
+      r.total_participants > 1
+        ? (r.placement - 1) / (r.total_participants - 1)
+        : 0
+    const clampedPct = Math.max(0, Math.min(1, pct))
+    const x = padLeft + (i / (n - 1)) * PLOT_W
+    const y = PAD_TOP + clampedPct * chartH
+    const barHeight = (r.total_participants / maxField) * BAR_H
+    const barY = PAD_TOP + chartH + GAP + (BAR_H - barHeight)
+    return { ...r, pct: clampedPct, x, y, barHeight, barY }
+  })
 
   const linePath = smoothPath(points)
-  const areaPath = `${linePath} L ${points[points.length - 1].x} ${PAD.top + chartH} L ${points[0].x} ${PAD.top + chartH} Z`
-  const xLabels = spacedIndices(points.length, 5)
+  const areaPath = `${linePath} L ${points[points.length - 1].x} ${PAD_TOP + chartH} L ${points[0].x} ${PAD_TOP + chartH} Z`
+  const maxDateLabels = isMobile ? 3 : n > 30 ? 4 : 5
+  const xLabels = spacedIndices(n, maxDateLabels)
   const pctTicks = [0, 0.25, 0.5, 0.75, 1.0]
-  const pctLabels = ['1st', 'Top 25%', 'Top 50%', 'Top 75%', 'Last']
+  const pctLabels = ['1st', '25%', '50%', '75%', 'Last']
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
@@ -64,215 +89,236 @@ export function PlacementTimeline({
           </h3>
         </div>
         <span className="font-mono text-[10px] text-white/20">
-          {chrono.length} events
+          {capped ? `Last ${MAX_EVENTS} of ${allChrono.length}` : `${chrono.length} events`}
         </span>
       </div>
 
-      <div className="relative px-2 pb-3">
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          className="w-full"
-          style={{ maxHeight: 360 }}
-        >
-          <defs>
-            <filter id="ptl-glow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-            <linearGradient id="ptl-area" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.1" />
-              <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
-            </linearGradient>
-            <pattern
-              id="ptl-scan"
-              width="4"
-              height="4"
-              patternUnits="userSpaceOnUse"
+      <div ref={containerRef} className="relative px-2 pb-3">
+        {width > 0 && (
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="w-full"
+            onTouchStart={(e) => {
+              if ((e.target as SVGElement).tagName !== 'circle') setHovIdx(null)
+            }}
+          >
+            <defs>
+              <filter id="ptl-glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+              <linearGradient id="ptl-area" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.1" />
+                <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+              </linearGradient>
+              <pattern id="ptl-scan" width="4" height="4" patternUnits="userSpaceOnUse">
+                <rect width="4" height="1" fill="white" opacity="0.012" />
+              </pattern>
+            </defs>
+
+            {/* Scan-line background */}
+            <rect x={padLeft} y={PAD_TOP} width={PLOT_W} height={PLOT_H} fill="url(#ptl-scan)" />
+
+            {/* Percentile grid lines */}
+            {pctTicks.map((pct, i) => {
+              const y = PAD_TOP + pct * chartH
+              return (
+                <g key={`g-${i}`}>
+                  <line
+                    x1={padLeft}
+                    y1={y}
+                    x2={padLeft + PLOT_W}
+                    y2={y}
+                    stroke="white"
+                    strokeOpacity={pct === 0.5 ? 0.06 : 0.03}
+                    strokeDasharray={pct === 0.5 ? '6 4' : '3 8'}
+                  />
+                  <text
+                    x={padLeft - 6}
+                    y={y}
+                    textAnchor="end"
+                    dominantBaseline="middle"
+                    fill="white"
+                    fillOpacity={0.2}
+                    fontSize={fontSize}
+                  >
+                    {pctLabels[i]}
+                  </text>
+                </g>
+              )
+            })}
+
+            {/* "Field" label */}
+            <text
+              x={padLeft - 6}
+              y={PAD_TOP + chartH + GAP + BAR_H / 2}
+              textAnchor="end"
+              dominantBaseline="middle"
+              fill="white"
+              fillOpacity={0.12}
+              fontSize={fontSize - 2}
+              letterSpacing="0.05em"
             >
-              <rect width="4" height="1" fill="white" opacity="0.012" />
-            </pattern>
-          </defs>
+              Field
+            </text>
 
-          {/* Scan-line background */}
-          <rect
-            x={PAD.left}
-            y={PAD.top}
-            width={PLOT_W}
-            height={PLOT_H}
-            fill="url(#ptl-scan)"
-          />
+            {/* Area gradient */}
+            <path d={areaPath} fill="url(#ptl-area)" />
 
-          {/* Percentile grid lines */}
-          {pctTicks.map((pct, i) => {
-            const y = PAD.top + pct * chartH
-            return (
-              <g key={`g-${i}`}>
-                <line
-                  x1={PAD.left}
-                  y1={y}
-                  x2={PAD.left + PLOT_W}
-                  y2={y}
-                  stroke="white"
-                  strokeOpacity={pct === 0.5 ? 0.06 : 0.03}
-                  strokeDasharray={pct === 0.5 ? '6 4' : '3 8'}
-                />
+            {/* Glow line */}
+            <path
+              d={linePath}
+              fill="none"
+              stroke="#22d3ee"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              filter="url(#ptl-glow)"
+              opacity={0.35}
+            />
+            {/* Crisp line */}
+            <path
+              d={linePath}
+              fill="none"
+              stroke="#22d3ee"
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+
+            {/* Data points + field bars */}
+            {points.map((p, i) => {
+              const color = pctColor(p.pct)
+              const isH = hovIdx === i
+              return (
+                <g key={i}>
+                  <rect
+                    x={p.x - Math.max(2, dotR - 1)}
+                    y={p.barY}
+                    width={Math.max(4, (dotR - 1) * 2)}
+                    height={p.barHeight}
+                    rx={2}
+                    fill="white"
+                    fillOpacity={isH ? 0.1 : 0.04}
+                  />
+                  {/* Crosshair on hover */}
+                  {isH && (
+                    <>
+                      <line x1={p.x} y1={PAD_TOP} x2={p.x} y2={PAD_TOP + chartH} stroke="white" strokeOpacity={0.06} strokeDasharray="2 3" />
+                      <line x1={padLeft} y1={p.y} x2={padLeft + PLOT_W} y2={p.y} stroke="white" strokeOpacity={0.06} strokeDasharray="2 3" />
+                    </>
+                  )}
+                  <circle cx={p.x} cy={p.y} r={isH ? glowR * 1.8 : glowR} fill={color} opacity={isH ? 0.2 : 0.08} />
+                  <circle
+                    cx={p.x}
+                    cy={p.y}
+                    r={isH ? dotR + 2 : dotR}
+                    fill={color}
+                    stroke={color}
+                    strokeOpacity={isH ? 0.8 : 0.4}
+                    strokeWidth={isH ? 2 : 1.5}
+                    filter="url(#ptl-glow)"
+                    className="cursor-pointer transition-all duration-100"
+                    onMouseEnter={() => setHovIdx(i)}
+                    onMouseLeave={() => setHovIdx(null)}
+                    onTouchStart={(e) => {
+                      e.preventDefault()
+                      setHovIdx(hovIdx === i ? null : i)
+                    }}
+                  />
+                  {points.length <= 12 && !isH && (
+                    <text
+                      x={p.x}
+                      y={p.y - 10}
+                      textAnchor="middle"
+                      fill="white"
+                      fillOpacity={0.3}
+                      fontSize={fontSize - 2}
+                      fontFamily="monospace"
+                    >
+                      {ordinal(p.placement)}
+                    </text>
+                  )}
+                </g>
+              )
+            })}
+
+            {/* X-axis date labels */}
+            {xLabels.map((idx) => {
+              const p = points[idx]
+              return (
                 <text
-                  x={PAD.left - 8}
-                  y={y}
-                  textAnchor="end"
-                  dominantBaseline="middle"
+                  key={idx}
+                  x={p.x}
+                  y={H - 8}
+                  textAnchor="middle"
                   fill="white"
                   fillOpacity={0.18}
-                  className="text-[9px]"
+                  fontSize={fontSize}
                 >
-                  {pctLabels[i]}
+                  {fmtDate(p.tournament_date)}
                 </text>
-              </g>
-            )
-          })}
+              )
+            })}
 
-          {/* "Field" label for bottom strip */}
-          <text
-            x={PAD.left - 8}
-            y={PAD.top + chartH + GAP + BAR_H / 2}
-            textAnchor="end"
-            dominantBaseline="middle"
-            fill="white"
-            fillOpacity={0.12}
-            className="text-[8px] uppercase tracking-wider"
-          >
-            Field
-          </text>
+            {/* Hover tooltip */}
+            {hovIdx !== null && points[hovIdx] && (
+              <PtlTip p={points[hovIdx]} W={W} H={H} padLeft={padLeft} chartH={chartH} fontSize={fontSize} />
+            )}
 
-          {/* Area gradient under the line */}
-          <path d={areaPath} fill="url(#ptl-area)" />
-
-          {/* Glow line */}
-          <path
-            d={linePath}
-            fill="none"
-            stroke="#22d3ee"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            filter="url(#ptl-glow)"
-            opacity={0.35}
-          />
-          {/* Crisp line */}
-          <path
-            d={linePath}
-            fill="none"
-            stroke="#22d3ee"
-            strokeWidth={1.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          {/* Data points + field-size bars */}
-          {points.map((p, i) => {
-            const color = pctColor(p.pct)
-            return (
-              <g key={i}>
-                {/* Field-size bar */}
-                <rect
-                  x={p.x - 3}
-                  y={p.barY}
-                  width={6}
-                  height={p.barHeight}
-                  rx={2}
-                  fill="white"
-                  fillOpacity={0.04}
-                />
-                {/* Field-size number */}
-                <text
-                  x={p.x}
-                  y={PAD.top + chartH + GAP + BAR_H + 12}
-                  textAnchor="middle"
-                  fill="white"
-                  fillOpacity={0.13}
-                  className="text-[7px] font-mono"
-                >
-                  {p.total_participants}
-                </text>
-
-                {/* Dot glow */}
-                <circle cx={p.x} cy={p.y} r={8} fill={color} opacity={0.08} />
-                {/* Dot */}
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={4}
-                  fill={color}
-                  stroke={color}
-                  strokeOpacity={0.4}
-                  strokeWidth={1.5}
-                  filter="url(#ptl-glow)"
-                />
-
-                {/* Placement annotation */}
-                <text
-                  x={p.x}
-                  y={p.y - 10}
-                  textAnchor="middle"
-                  fill="white"
-                  fillOpacity={0.3}
-                  className="text-[8px] font-mono"
-                >
-                  {ordinal(p.placement)}
-                </text>
-
-                <title>{`${p.tournament_name} (${fmtDate(p.tournament_date)})\n${ordinal(p.placement)} / ${p.total_participants}, ${((1 - p.pct) * 100).toFixed(0)}th percentile`}</title>
-              </g>
-            )
-          })}
-
-          {/* X-axis date labels */}
-          {xLabels.map((idx) => {
-            const p = points[idx]
-            return (
-              <text
-                key={idx}
-                x={p.x}
-                y={H - 6}
-                textAnchor="middle"
-                fill="white"
-                fillOpacity={0.15}
-                className="text-[9px]"
-              >
-                {fmtDate(p.tournament_date)}
-              </text>
-            )
-          })}
-
-          {/* Y-axis label */}
-          <text
-            x={10}
-            y={PAD.top + chartH / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            transform={`rotate(-90, 10, ${PAD.top + chartH / 2})`}
-            fill="white"
-            fillOpacity={0.1}
-            className="text-[9px] uppercase tracking-[0.15em]"
-          >
-            Placement Percentile
-          </text>
-
-          {/* HUD corner brackets */}
-          <Bracket x={PAD.left + 4} y={PAD.top + 4} />
-          <Bracket x={PAD.left + PLOT_W - 4} y={PAD.top + 4} flipX />
-          <Bracket x={PAD.left + 4} y={PAD.top + PLOT_H - 4} flipY />
-          <Bracket x={PAD.left + PLOT_W - 4} y={PAD.top + PLOT_H - 4} flipX flipY />
-        </svg>
+            {/* HUD corner brackets */}
+            <Bracket x={padLeft + 4} y={PAD_TOP + 4} />
+            <Bracket x={padLeft + PLOT_W - 4} y={PAD_TOP + 4} flipX />
+            <Bracket x={padLeft + 4} y={PAD_TOP + PLOT_H - 4} flipY />
+            <Bracket x={padLeft + PLOT_W - 4} y={PAD_TOP + PLOT_H - 4} flipX flipY />
+          </svg>
+        )}
       </div>
     </div>
   )
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────
+
+function PtlTip({ p, W, H, padLeft, chartH, fontSize }: {
+  p: { tournament_name: string; tournament_date: string; placement: number; total_participants: number; pct: number; x: number; y: number }
+  W: number; H: number; padLeft: number; chartH: number; fontSize: number
+}) {
+  const tw = W < 500 ? 130 : 155
+  const th = 52
+  let tx = p.x + 10
+  let ty = p.y - th - 8
+  if (tx + tw > W - 16) tx = p.x - tw - 10
+  if (ty < PAD_TOP) ty = p.y + 12
+
+  const topPct = Math.max(1, Math.round(p.pct * 100))
+  const pctLabel = p.placement === 1
+    ? '1st place'
+    : `Top ${topPct}%`
+
+  const maxChars = W < 500 ? 16 : 22
+  const name = p.tournament_name.length > maxChars
+    ? p.tournament_name.slice(0, maxChars - 1) + '…'
+    : p.tournament_name
+
+  return (
+    <g className="pointer-events-none">
+      <rect x={tx} y={ty} width={tw} height={th} rx={6} fill="#0a0a0a" stroke="white" strokeOpacity={0.1} />
+      <text x={tx + 8} y={ty + 15} fill="white" fillOpacity={0.9} fontSize={fontSize} fontWeight="600">
+        {name}
+      </text>
+      <text x={tx + 8} y={ty + 30} fill="white" fillOpacity={0.4} fontSize={fontSize - 1} fontFamily="monospace">
+        {ordinal(p.placement)} / {p.total_participants}, {pctLabel}
+      </text>
+      <text x={tx + 8} y={ty + 44} fill="white" fillOpacity={0.2} fontSize={fontSize - 2}>
+        {fmtDate(p.tournament_date)}
+      </text>
+    </g>
+  )
+}
 
 function Bracket({
   x,
@@ -289,22 +335,8 @@ function Bracket({
   const sy = flipY ? -1 : 1
   return (
     <g>
-      <line
-        x1={x}
-        y1={y}
-        x2={x + 12 * sx}
-        y2={y}
-        stroke="white"
-        strokeOpacity={0.06}
-      />
-      <line
-        x1={x}
-        y1={y}
-        x2={x}
-        y2={y + 12 * sy}
-        stroke="white"
-        strokeOpacity={0.06}
-      />
+      <line x1={x} y1={y} x2={x + 12 * sx} y2={y} stroke="white" strokeOpacity={0.06} />
+      <line x1={x} y1={y} x2={x} y2={y + 12 * sy} stroke="white" strokeOpacity={0.06} />
     </g>
   )
 }
@@ -312,10 +344,10 @@ function Bracket({
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function pctColor(pct: number): string {
-  if (pct <= 0.1) return '#34d399' // top 10% — emerald
-  if (pct <= 0.25) return '#22d3ee' // top 25% — cyan
-  if (pct <= 0.5) return '#60a5fa' // top 50% — blue
-  return '#f87171' // bottom half — red
+  if (pct <= 0.1) return '#34d399'
+  if (pct <= 0.25) return '#22d3ee'
+  if (pct <= 0.5) return '#60a5fa'
+  return '#f87171'
 }
 
 function ordinal(n: number): string {

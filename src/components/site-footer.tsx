@@ -2,17 +2,18 @@ import Link from 'next/link'
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-white/[0.08] bg-white/[0.01] px-4 py-5">
+    <footer className="border-t border-white/[0.08] bg-white/[0.01] px-4 py-6">
       <div className="mx-auto flex max-w-5xl flex-col items-center gap-4">
-        {/* Row 1: site nav + socials inline */}
-        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+        {/* Nav links */}
+        <div className="flex items-center gap-5">
           <Link href="/" className="text-xs text-white/40 transition-colors hover:text-white/80">Rankings</Link>
           <Link href="/players" className="text-xs text-white/40 transition-colors hover:text-white/80">Players</Link>
           <Link href="/about" className="text-xs text-white/40 transition-colors hover:text-white/80">About</Link>
           <Link href="/faq" className="text-xs text-white/40 transition-colors hover:text-white/80">FAQ</Link>
+        </div>
 
-          <span className="hidden h-3 w-px bg-white/[0.12] sm:block" />
-
+        {/* Socials — pyramid: 3 top, 3 bottom on mobile, single row on desktop */}
+        <div className="flex flex-wrap justify-center gap-2.5 sm:gap-3">
           <SocialIcon href="https://discord.gg/W7BfUNd" label="Discord">
             <svg viewBox="0 0 127.14 96.36" className="h-[14px] w-[14px] fill-current"><path d="M107.7 8.07A105.15 105.15 0 0081.47 0a72.06 72.06 0 00-3.36 6.83 97.68 97.68 0 00-29.11 0A72.37 72.37 0 0045.64 0a105.89 105.89 0 00-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.69 105.69 0 0032.17 16.15 77.7 77.7 0 006.89-11.11 68.42 68.42 0 01-10.85-5.18c.91-.66 1.8-1.34 2.66-2.04a75.57 75.57 0 0064.32 0c.87.71 1.76 1.39 2.66 2.04a68.68 68.68 0 01-10.87 5.19 77 77 0 006.89 11.1 105.25 105.25 0 0032.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15zM42.45 65.69C36.18 65.69 31 60 31 53.05s5-12.68 11.45-12.68S54 46.07 53.89 53.05 48.84 65.69 42.45 65.69zm42.24 0C78.41 65.69 73.25 60 73.25 53.05s5-12.68 11.44-12.68S96.23 46.07 96.12 53.05 91.08 65.69 84.69 65.69z" /></svg>
           </SocialIcon>
@@ -31,23 +32,22 @@ export function SiteFooter() {
           <SocialIcon href="https://tiktok.com/@elonesports" label="TikTok">
             <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-current"><path d="M9 0h1.98c.144.715.54 1.617 1.235 2.512C12.895 3.389 13.797 4 15 4v2c-1.753 0-3.07-.814-4-1.829V11a5 5 0 11-5-5v2a3 3 0 103 3V0z" /></svg>
           </SocialIcon>
-
-          <span className="hidden h-3 w-px bg-white/[0.12] sm:block" />
-
-          <a
-            href="https://github.com/drewfoos"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs text-white/40 transition-colors hover:text-white/80"
-          >
-            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
-              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-            </svg>
-            drewfoos
-          </a>
         </div>
 
-        {/* Row 2: club name + disclaimer */}
+        {/* GitHub */}
+        <a
+          href="https://github.com/drewfoos"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-xs text-white/30 transition-colors hover:text-white/60"
+        >
+          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+          </svg>
+          drewfoos
+        </a>
+
+        {/* Disclaimer */}
         <p className="text-[11px] text-white/20">
           Elon University Esports Club · Not affiliated with Nintendo
         </p>
@@ -62,7 +62,7 @@ function SocialIcon({ href, label, children }: { href: string; label: string; ch
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-white/30 transition-colors hover:text-white/70"
+      className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.04] text-white/30 transition-colors hover:bg-white/[0.1] hover:text-white/70"
       aria-label={label}
     >
       {children}

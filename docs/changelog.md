@@ -4,6 +4,48 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v1.2.0 — Mobile Responsiveness & Polish
+
+### Mobile Navigation
+- **Hamburger menu** — Sheet-based mobile drawer with nav links, social icons, and active page indicator
+- **"Smash PR" badge** hidden on mobile to save header space
+
+### Chart Responsiveness
+- **Performance Signal & Placement Timeline** — ResizeObserver-based responsive viewBox (1 SVG unit ≈ 1 CSS pixel), taller aspect ratio on mobile, larger font sizes, touch support
+- **Performance Signal** — compact mobile legend ("1st", "25%", "50%", "50%+"), abbreviated semester labels ("SP25"), MAX_EVENTS=25 cap
+- **Placement Timeline** — adaptive dot sizing, hover/touch glow with crosshair + tooltip, field-size bars, MAX_EVENTS=25 cap
+- **Player Scatter** — touch support: first tap shows tooltip, second tap navigates
+
+### Layout & Controls
+- **Home page controls** — semester dropdown and min tournaments slider side-by-side on mobile (w-40/w-32), aligned with leaderboard width
+- **Players directory stats** — labels ("Players", "Sets", "Wins") visible on mobile instead of icon-only
+- **Scatter plot** hidden on mobile in player directory
+- **Hero badge** ("Elon University Esports") hidden on mobile
+- **Hero dot** changed from red to green (active data indicator)
+
+### Login Page Redesign
+- Terminal/command center aesthetic with grid pattern background and radial fade
+- HUD corner brackets, pulsing ring on shield icon
+- Indigo accent glow on focused inputs, password visibility toggle
+- SiteHeader added, `min-h-dvh` for proper mobile viewport
+
+### Footer
+- Pyramid layout: nav links → social icon buttons (3+3 wrap) → GitHub → disclaimer
+
+### Table Fixes
+- **Tournament history** — long names truncated with `max-w-[200px]` + ellipsis
+- **Head-to-head** — `table-fixed` layout, compact column widths, shortened headers ("W", "L", "Win %"), opponent name truncated
+- **Stat cards** — tighter gaps and padding on mobile, shorter labels
+
+### Cursor & Interactivity
+- `cursor-pointer` added to all interactive buttons: login submit, password toggle, hamburger menu, H2H sort headers, admin start.gg ID buttons, admin create player, admin clear/all toggle
+
+### Security
+- CSP `frame-ancestors` changed from `'none'` to `'self'` (allows password manager overlays)
+- Removed deprecated `interest-cohort` from Permissions-Policy
+
+---
+
 ## v1.1.0 — SEO & Social Sharing
 
 ### OpenGraph Preview Image

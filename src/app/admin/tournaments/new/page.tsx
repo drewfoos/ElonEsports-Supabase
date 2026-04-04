@@ -200,7 +200,7 @@ const PlayerPicker = memo(function PlayerPicker({
           {searchTrimmed && !exactMatch && onCreatePlayer && (
             <button
               type="button"
-              className="flex w-full items-center gap-2 border-b px-3 py-2 text-sm text-primary hover:bg-accent disabled:opacity-50"
+              className="flex w-full cursor-pointer items-center gap-2 border-b px-3 py-2 text-sm text-primary hover:bg-accent disabled:opacity-50"
               onClick={handleCreate}
               disabled={creating}
             >
@@ -730,7 +730,7 @@ const StandingsPreview = memo(function StandingsPreview({
           <span>Elon</span>
           <button
             type="button"
-            className="rounded px-1.5 py-0.5 text-[10px] font-medium text-primary ring-1 ring-primary/30 transition-colors hover:bg-primary/10"
+            className="cursor-pointer rounded px-1.5 py-0.5 text-[10px] font-medium text-primary ring-1 ring-primary/30 transition-colors hover:bg-primary/10"
             onClick={() => onToggleAll(!allChecked)}
           >
             {allChecked ? 'Clear' : 'All'}

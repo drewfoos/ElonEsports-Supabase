@@ -143,7 +143,7 @@ function HeroGeometric({
                     height={80}
                     rotate={-8}
                     gradient="from-violet-500/[0.15]"
-                    className="left-[5%] md:left-[10%] bottom-[5%] md:bottom-[10%]"
+                    className="hidden sm:block left-[5%] md:left-[10%] bottom-[5%] md:bottom-[10%]"
                     characterImg="/characters/kirby.webp"
                 />
 
@@ -175,9 +175,9 @@ function HeroGeometric({
                         variants={fadeUpVariants}
                         initial="hidden"
                         animate="visible"
-                        className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.08] mb-10 md:mb-14"
+                        className="hidden sm:inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.08] mb-10 md:mb-14"
                     >
-                        <Circle className="h-2 w-2 fill-rose-500/80" />
+                        <Circle className="h-2 w-2 fill-emerald-500/80" />
                         <span className="text-sm text-white/60 tracking-wide">
                             {badge}
                         </span>
