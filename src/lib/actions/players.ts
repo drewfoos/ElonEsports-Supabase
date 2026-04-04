@@ -538,8 +538,8 @@ export async function unmergePlayers(
   if (!ids.includes(startggIdToSplit)) {
     return { error: `Player does not have start.gg ID "${startggIdToSplit}".` }
   }
-  if (ids.length < 2) {
-    return { error: 'Cannot unmerge — player only has one start.gg ID.' }
+  if (ids.length < 1) {
+    return { error: 'Cannot unmerge — player has no start.gg IDs.' }
   }
 
   // 2. Look up merge history for original gamer tag

@@ -52,11 +52,9 @@ BEGIN
   -- 7. Update keep player's startgg IDs
   UPDATE players SET startgg_player_ids = p_combined_startgg_ids WHERE id = p_keep_id;
 
-  -- 8. Record merge history (only if merge player had startgg IDs)
-  IF array_length(p_merged_startgg_ids, 1) IS NOT NULL THEN
-    INSERT INTO merge_history (keep_player_id, merged_gamer_tag, merged_startgg_ids)
-    VALUES (p_keep_id, p_merged_gamer_tag, p_merged_startgg_ids);
-  END IF;
+  -- 8. Record merge history (always, even for manual-only merges)
+  INSERT INTO merge_history (keep_player_id, merged_gamer_tag, merged_startgg_ids)
+  VALUES (p_keep_id, p_merged_gamer_tag, COALESCE(p_merged_startgg_ids, '{}'));
 
   -- 9. Delete merged player (FK cascade cleans up orphaned semester statuses)
   DELETE FROM players WHERE id = p_merge_id;

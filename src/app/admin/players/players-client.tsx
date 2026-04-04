@@ -593,7 +593,7 @@ export default function PlayersClient({
                 {idsValue.map(id => (
                   <div key={id} className="flex items-center justify-between rounded-md border px-3 py-2">
                     <span className="font-mono text-sm">{id}</span>
-                    {idsValue.length >= 2 && (
+                    {idsValue.length >= 1 && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -620,8 +620,14 @@ export default function PlayersClient({
               <p className="text-xs text-muted-foreground">
                 This will create a new player with this ID and move all tournament results
                 and sets that originated from it. Results without source tracking (from older
-                imports) will stay with the current player.
+                imports or manual entry) will stay with the current player.
               </p>
+              {idsValue.length === 1 && (
+                <p className="text-xs font-medium text-amber-500">
+                  This is the player&apos;s only start.gg ID. After unmerge, they will have no
+                  linked start.gg account and only retain manually-entered results.
+                </p>
+              )}
               <div className="flex gap-2 pt-1">
                 <Button
                   variant="outline"
