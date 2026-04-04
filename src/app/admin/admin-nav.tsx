@@ -41,7 +41,7 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
       {/* Header */}
       <div className="px-4 py-5">
         <Link href="/" className="flex items-center gap-2 text-lg font-bold text-foreground hover:text-amber-400 transition-colors">
-          <Image src="/icon.svg" alt="" width={32} height={32} className="h-8 w-8" />
+          <Image src="/icon.svg" alt="Elon Esports" width={32} height={32} className="h-8 w-8" />
           Elon Esports
         </Link>
         <p className="mt-1 truncate text-xs text-muted-foreground">{userEmail}</p>
@@ -92,7 +92,7 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
       {/* Mobile header bar */}
       <div className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between border-b bg-background px-4 py-3 md:hidden">
         <Link href="/" className="flex items-center gap-2 text-sm font-bold text-foreground hover:text-amber-400 transition-colors">
-          <Image src="/icon.svg" alt="" width={28} height={28} className="h-7 w-7" />
+          <Image src="/icon.svg" alt="Elon Esports" width={28} height={28} className="h-7 w-7" />
           Admin
         </Link>
         <button
@@ -130,6 +130,7 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          aria-hidden="true"
           onClick={() => setMobileOpen(false)}
         />
       )}

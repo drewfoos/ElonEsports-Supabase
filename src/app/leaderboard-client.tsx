@@ -268,7 +268,7 @@ export function LeaderboardClient({
         {/* Controls bar */}
         <div className="mb-8 flex items-end justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-4 sm:mb-10 sm:px-5">
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-white/25">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-white/40">
               Semester
             </label>
             <Select
@@ -291,7 +291,7 @@ export function LeaderboardClient({
           </div>
 
           <div className="flex flex-col gap-1.5 items-end">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-white/25">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-white/40">
               Min. Tournaments:{' '}
               <span className="text-white/50 font-mono">{minTournaments}</span>
             </label>
@@ -303,6 +303,7 @@ export function LeaderboardClient({
                 step={1}
                 value={minTournaments}
                 onChange={(e) => handleMinTournamentsChange(Number(e.target.value))}
+                aria-label={`Minimum tournaments: ${minTournaments}`}
                 className="w-full cursor-pointer accent-indigo-400"
               />
             </div>
@@ -322,7 +323,7 @@ export function LeaderboardClient({
             <p className="text-lg font-medium text-white/40">
               No rankings available for this semester
             </p>
-            <p className="text-sm text-white/20">
+            <p className="text-sm text-white/40">
               Try selecting a different semester or lowering the minimum tournament requirement.
             </p>
             <div className="mt-4">
@@ -427,7 +428,7 @@ export function LeaderboardClient({
         {!loading && recentTournaments.length > 0 && (
           <div className="mt-10 sm:mt-12">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-sm font-medium uppercase tracking-wider text-white/25">
+              <h2 className="text-sm font-medium uppercase tracking-wider text-white/40">
                 Recent Tournaments
               </h2>
               <Link href="/tournaments" className="text-xs text-white/30 transition-colors hover:text-white/60">
@@ -562,7 +563,7 @@ function PodiumCard({
         {entry.average_score.toFixed(3)}
       </span>
 
-      <span className="mt-0.5 text-[10px] text-white/20">
+      <span className="mt-0.5 text-[10px] text-white/40">
         {entry.tournament_count} tournament{entry.tournament_count !== 1 ? 's' : ''}
       </span>
     </div>

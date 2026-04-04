@@ -90,7 +90,7 @@ export function SiteHeader() {
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/icon.svg" alt="" width={32} height={32} className="h-8 w-8" />
+            <Image src="/icon.svg" alt="Elon Esports" width={32} height={32} className="h-8 w-8" />
             <span className="text-lg font-bold tracking-tight text-white transition-colors hover:text-white/80">
               Elon Esports
             </span>
@@ -146,10 +146,10 @@ export function SiteHeader() {
               <div className="relative flex items-center gap-3 border-b border-white/[0.06] px-5 py-5">
                 {/* Subtle accent line at top */}
                 <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-                <Image src="/icon.svg" alt="" width={28} height={28} className="h-7 w-7" />
+                <Image src="/icon.svg" alt="Elon Esports" width={28} height={28} className="h-7 w-7" />
                 <div>
                   <p className="text-sm font-semibold tracking-tight text-white">Elon Esports</p>
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-white/30">Smash PR</p>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-white/40">Smash PR</p>
                 </div>
               </div>
 
@@ -211,7 +211,7 @@ export function SiteHeader() {
 
               {/* Socials */}
               <div className="px-5 py-4">
-                <p className="mb-3 text-[10px] font-medium uppercase tracking-[0.2em] text-white/20">
+                <p className="mb-3 text-[10px] font-medium uppercase tracking-[0.2em] text-white/40">
                   Connect
                 </p>
                 <div className="flex items-center gap-3">

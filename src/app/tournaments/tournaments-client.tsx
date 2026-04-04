@@ -148,6 +148,7 @@ export function TournamentsListClient({
       {totalPages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-2">
           <button
+            type="button"
             onClick={() => fetchPage(page - 1, selectedSemester)}
             disabled={page === 0 || loading}
             className="rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white/70 disabled:opacity-30 disabled:cursor-not-allowed"
@@ -158,6 +159,7 @@ export function TournamentsListClient({
             {page + 1} / {totalPages}
           </span>
           <button
+            type="button"
             onClick={() => fetchPage(page + 1, selectedSemester)}
             disabled={page >= totalPages - 1 || loading}
             className="rounded-md border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white/70 disabled:opacity-30 disabled:cursor-not-allowed"

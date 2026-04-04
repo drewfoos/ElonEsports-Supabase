@@ -102,7 +102,7 @@ export default function LoginPage() {
                 <h1 className="text-[13px] font-semibold uppercase tracking-[0.2em] text-white/60">
                   Admin Access
                 </h1>
-                <p className="mt-1 text-[11px] text-white/25">
+                <p className="mt-1 text-[11px] text-white/40">
                   Tournament organizers only
                 </p>
               </div>
@@ -159,7 +159,8 @@ export default function LoginPage() {
                     type="button"
                     tabIndex={-1}
                     onClick={() => setShowPassword(!showPassword)}
-                    className="flex cursor-pointer items-center px-3 text-white/20 transition-colors hover:text-white/50"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="flex cursor-pointer items-center px-3 text-white/40 transition-colors hover:text-white/60"
                   >
                     {showPassword
                       ? <EyeOff className="h-4 w-4" />
@@ -206,7 +207,7 @@ export default function LoginPage() {
         </div>
 
         {/* Footer */}
-        <p className="mt-6 text-center text-[11px] text-white/15 login-fade-in" style={{ animationDelay: '0.5s' }}>
+        <p className="mt-6 text-center text-[11px] text-white/40 login-fade-in" style={{ animationDelay: '0.5s' }}>
           Contact the current club captain for access
         </p>
       </div>

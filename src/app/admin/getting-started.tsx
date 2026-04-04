@@ -136,6 +136,7 @@ export function GettingStarted() {
   return (
     <Card className="overflow-hidden">
       <button
+        type="button"
         onClick={() => setExpanded((e) => !e)}
         className="flex w-full cursor-pointer items-center justify-between p-4 text-left"
       >
@@ -160,6 +161,7 @@ export function GettingStarted() {
                   }`}
                 >
                   <button
+                    type="button"
                     onClick={() => setOpenIndex(isOpen ? null : i)}
                     className="flex w-full cursor-pointer items-center gap-3 p-3 text-left transition-colors"
                   >

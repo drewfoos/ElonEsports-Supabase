@@ -426,6 +426,7 @@ function HeadToHeadTable({
       </Table>
       {records.length > 10 && (
         <button
+          type="button"
           onClick={() => setExpanded(!expanded)}
           className="flex w-full cursor-pointer items-center justify-center gap-1.5 border-t border-white/[0.06] py-2.5 text-xs font-medium text-white/30 transition-colors hover:bg-white/[0.03] hover:text-white/60"
         >
@@ -468,6 +469,7 @@ function SortableHead({
   return (
     <TableHead className={`${align} ${className ?? ''}`}>
       <button
+        type="button"
         onClick={() => onSort(sortKey)}
         className={`inline-flex cursor-pointer items-center gap-1 text-white/30 transition-colors hover:text-white/60 ${center ? 'mx-auto' : ''} ${right ? 'ml-auto' : ''}`}
       >
@@ -571,6 +573,7 @@ function TournamentHistoryTable({
       </Table>
       {results.length > 10 && (
         <button
+          type="button"
           onClick={() => setExpanded(!expanded)}
           className="flex w-full cursor-pointer items-center justify-center gap-1.5 border-t border-white/[0.06] py-2.5 text-xs font-medium text-white/30 transition-colors hover:bg-white/[0.03] hover:text-white/60"
         >

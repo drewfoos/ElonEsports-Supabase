@@ -64,6 +64,8 @@ export function PlayerScatter({ players }: { players: PlayerListItem[] }) {
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="w-full"
+          role="img"
+          aria-label="Scatter plot showing player win rates vs sets played"
           style={{ maxHeight: 340 }}
           onTouchStart={(e) => {
             if ((e.target as SVGElement).tagName !== 'circle') {
@@ -137,7 +139,7 @@ export function PlayerScatter({ players }: { players: PlayerListItem[] }) {
                   dominantBaseline="middle"
                   className="text-[10px]"
                   fill="white"
-                  fillOpacity={0.2}
+                  fillOpacity={0.4}
                 >
                   {tick}%
                 </text>
@@ -164,7 +166,7 @@ export function PlayerScatter({ players }: { players: PlayerListItem[] }) {
                   textAnchor="middle"
                   className="text-[10px]"
                   fill="white"
-                  fillOpacity={0.2}
+                  fillOpacity={0.4}
                 >
                   {tick}
                 </text>
@@ -179,7 +181,7 @@ export function PlayerScatter({ players }: { players: PlayerListItem[] }) {
             textAnchor="middle"
             className="text-[10px] uppercase"
             fill="white"
-            fillOpacity={0.15}
+            fillOpacity={0.4}
             letterSpacing="0.1em"
           >
             Sets Played
@@ -192,7 +194,7 @@ export function PlayerScatter({ players }: { players: PlayerListItem[] }) {
             transform={`rotate(-90, 12, ${PAD.top + PLOT_H / 2})`}
             className="text-[10px] uppercase"
             fill="white"
-            fillOpacity={0.15}
+            fillOpacity={0.4}
             letterSpacing="0.1em"
           >
             Win Rate

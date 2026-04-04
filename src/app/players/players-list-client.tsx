@@ -101,6 +101,7 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
               placeholder="Search by gamer tag..."
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
+              aria-label="Search players by gamer tag"
               className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] py-2 pl-10 pr-4 text-sm text-white placeholder:text-white/25 outline-none transition-colors focus:border-white/[0.15] focus:bg-white/[0.05]"
             />
           </div>
@@ -117,6 +118,7 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
             </p>
             {search && (
               <button
+                type="button"
                 onClick={() => setSearch('')}
                 className="text-sm text-indigo-400/70 transition-colors hover:text-indigo-400"
               >
@@ -245,8 +247,10 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
             {totalPages > 1 && (
               <div className="mt-6 flex items-center justify-center gap-3">
                 <button
+                  type="button"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page === 1}
+                  aria-label="Previous page"
                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:pointer-events-none disabled:opacity-30"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -257,8 +261,10 @@ export function PlayersListClient({ players, fetchedAt }: { players: PlayerListI
                   <span className="font-mono text-white/60">{totalPages}</span>
                 </span>
                 <button
+                  type="button"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
+                  aria-label="Next page"
                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:pointer-events-none disabled:opacity-30"
                 >
                   <ChevronRight className="h-4 w-4" />

@@ -4,6 +4,26 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v1.3.1 — Accessibility & Performance Audit
+
+### Accessibility — Buttons & Labels
+- **Password toggle** (`login/page.tsx`) — added `aria-label` ("Show password" / "Hide password")
+- **Range slider** (`leaderboard-client.tsx`) — added `aria-label` for minimum tournaments control
+- **Search input** (`players-list-client.tsx`) — added `aria-label` for gamer tag search
+- **Pagination buttons** (`players-list-client.tsx`, `tournaments-client.tsx`) — added `aria-label` and `type="button"`
+- **`type="button"`** added to all non-submit buttons across `error.tsx`, `global-error.tsx`, `profile-client.tsx` (sort headers, show more/less), `getting-started.tsx` (accordion toggles), and `tournaments-client.tsx` (prev/next)
+- **Logo alt text** — all `<Image src="/icon.svg" alt="">` instances in `site-header.tsx` and `admin-nav.tsx` now use `alt="Elon Esports"`
+- **Sidebar overlay** (`admin-nav.tsx`) — added `aria-hidden="true"` to backdrop div
+- **Scatter chart** (`player-scatter.tsx`) — added `role="img"` and `aria-label` to SVG
+
+### Accessibility — Color Contrast (WCAG AA)
+- Bumped `text-white/15` and `text-white/20` to `text-white/40` across login footer, login subtitle, leaderboard labels ("Semester", "Min. Tournaments", empty state, "Recent Tournaments"), podium tournament count, scatter chart axis labels/ticks, and mobile menu labels ("Smash PR", "Connect")
+
+### Performance
+- **`optimizePackageImports`** — enabled for `lucide-react` and `framer-motion` in `next.config.ts` to reduce JS bundle size via tree-shaking
+
+---
+
 ## v1.3.0 — Source Tracking, Atomic Merge/Unmerge & Public Tournaments
 
 ### Source Tracking
