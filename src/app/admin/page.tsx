@@ -259,13 +259,13 @@ export default async function AdminDashboardPage() {
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-10">
             <p className="text-muted-foreground">
-              No active semester. Create one to get started.
+              No active semester. Import a tournament to get started — a semester will be created automatically.
             </p>
             <Link
-              href="/admin/semesters"
+              href="/admin/tournaments/new"
               className={linkPrimarySm}
             >
-              Manage Semesters
+              Import your first tournament
             </Link>
           </CardContent>
         </Card>
