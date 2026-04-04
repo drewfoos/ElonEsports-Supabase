@@ -98,7 +98,7 @@ export function AdminNav({ userEmail }: { userEmail: string }) {
         <button
           type="button"
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          className="cursor-pointer rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
           aria-label="Toggle navigation"
         >
           <svg

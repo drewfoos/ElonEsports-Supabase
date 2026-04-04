@@ -556,7 +556,7 @@ function ManualEntryTab({ players: initialPlayers }: { players: Player[] }) {
           <div className="flex gap-1 rounded-md border p-1">
             <button
               type="button"
-              className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`flex-1 cursor-pointer rounded px-3 py-1.5 text-sm font-medium transition-colors ${
                 bracketFormat === 'double'
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -567,7 +567,7 @@ function ManualEntryTab({ players: initialPlayers }: { players: Player[] }) {
             </button>
             <button
               type="button"
-              className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`flex-1 cursor-pointer rounded px-3 py-1.5 text-sm font-medium transition-colors ${
                 bracketFormat === 'single'
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -709,7 +709,7 @@ const StandingsPreview = memo(function StandingsPreview({
             <button
               key={mode}
               type="button"
-              className={`px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md ${
+              className={`cursor-pointer px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md ${
                 filterMode === mode
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
