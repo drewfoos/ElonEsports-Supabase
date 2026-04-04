@@ -5,6 +5,7 @@ import type { Semester, LeaderboardEntry } from '@/lib/types'
 import { LeaderboardClient } from './leaderboard-client'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/' },
   title: 'Power Rankings',
   description:
     'Live Smash Bros. Ultimate power rankings for Elon University Esports. See who tops the leaderboard each semester.',

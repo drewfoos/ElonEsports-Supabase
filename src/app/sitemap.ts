@@ -3,7 +3,7 @@ import { createStaticClient } from '@/lib/supabase/static'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ?? 'https://elon-esports.vercel.app'
+    process.env.NEXT_PUBLIC_SITE_URL ?? 'https://elon-smash-pr.vercel.app'
 
   // Static pages
   const staticPages: MetadataRoute.Sitemap = [

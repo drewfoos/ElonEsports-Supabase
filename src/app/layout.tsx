@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://elon-esports.vercel.app"
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://elon-smash-pr.vercel.app"
   ),
   title: {
     default: "Elon Esports Smash PR",
@@ -37,12 +37,21 @@ export const metadata: Metadata = {
     title: "Elon Esports Smash PR",
     description:
       "Super Smash Bros. Ultimate tournament tracker and power rankings for Elon University Esports",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Elon Esports Smash PR — Power Rankings leaderboard with animated hero and Smash character renders",
+      },
+    ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Elon Esports Smash PR",
     description:
       "Super Smash Bros. Ultimate tournament tracker and power rankings for Elon University Esports",
+    images: ["/og-image.png"],
   },
   icons: {
     icon: [
@@ -53,6 +62,9 @@ export const metadata: Metadata = {
     apple: "/apple-icon.png",
   },
   manifest: "/site.webmanifest",
+  alternates: {
+    canonical: "/",
+  },
   robots: {
     index: true,
     follow: true,
@@ -70,6 +82,21 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              name: "Elon University Esports Club",
+              url: "https://elon-smash-pr.vercel.app",
+              logo: "https://elon-smash-pr.vercel.app/icon.svg",
+              description:
+                "Super Smash Bros. Ultimate tournament tracker and power rankings for Elon University Esports",
+              sameAs: [],
+            }),
+          }}
+        />
         {children}
         <Toaster />
       </body>

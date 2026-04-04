@@ -4,6 +4,23 @@ All notable changes to the Elon Esports Smash PR tracker.
 
 ---
 
+## v1.1.0 — SEO & Social Sharing
+
+### OpenGraph Preview Image
+- **OG image** — `public/og-image.png` (hero screenshot) referenced in `openGraph.images` and `twitter.images` across root layout
+- **Twitter card** upgraded from `summary` to `summary_large_image` for full-width preview when sharing links
+
+### Canonical URLs
+- `alternates.canonical` added to all 6 public pages: `/`, `/about`, `/faq`, `/players`, `/players/[playerId]`, and root layout default
+
+### Structured Data
+- **JSON-LD Organization schema** in root layout — club name, site URL, logo, description for Google knowledge panel
+
+### Fixes
+- **metadataBase** corrected from `elon-esports.vercel.app` to `elon-smash-pr.vercel.app` in layout, robots, and sitemap
+
+---
+
 ## v1.0.0 — Release
 
 ### SEO & Crawling

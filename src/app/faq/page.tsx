@@ -5,6 +5,7 @@ import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/faq' },
   title: 'FAQ',
   description:
     'Frequently asked questions about Elon Esports Smash PR: rankings, scoring, imports, and more.',

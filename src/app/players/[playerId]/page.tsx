@@ -29,6 +29,7 @@ export async function generateMetadata({
   const desc = `${tag}'s Smash Bros. tournament stats, set record, and head-to-head matchups at Elon University Esports.`
 
   return {
+    alternates: { canonical: `/players/${playerId}` },
     title: tag,
     description: desc,
     openGraph: {

@@ -4,6 +4,7 @@ import { unstable_cache } from 'next/cache'
 import { PlayersListClient } from './players-list-client'
 
 export const metadata: Metadata = {
+  alternates: { canonical: '/players' },
   title: 'Player Directory',
   description:
     'Browse all Elon University Smash Bros. players: tournament records, set stats, and head-to-head matchups.',
