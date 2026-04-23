@@ -27,13 +27,26 @@ export function computeWeight(
 
 /**
  * Compute a single tournament result score.
- * score = placement × weight
+ * score = (placement / totalParticipants) × weight
+ *       = (placement × elonParticipants) / totalParticipants²
  *
- * Lower is better. 1st at a local (1 × 0.14 = 0.14) beats 1st at a weekly (1 × 0.91).
+ * Lower is better. Placement is normalized to a percentile of the field so that
+ * going 14th of 30 (top half) correctly beats going 7th of 7 (dead last) — raw
+ * placement alone would reward the smaller, worse finish.
+ *
+ * Examples at weight 1.0 (fully Elon field):
+ *  - 1st of 11  → 1/11  × 1.0 ≈ 0.091
+ *  - 14th of 30 → 14/30 × 1.0 ≈ 0.467
+ *  - 7th of 7   → 7/7   × 1.0 = 1.000
  */
-export function computeScore(placement: number, weight: number): number {
+export function computeScore(
+  placement: number,
+  weight: number,
+  totalParticipants: number,
+): number {
   if (!Number.isFinite(placement) || !Number.isFinite(weight)) return 0
-  return placement * weight
+  if (!Number.isFinite(totalParticipants) || totalParticipants <= 0) return 0
+  return (placement / totalParticipants) * weight
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +212,7 @@ async function _recalculateSemesterInner(
 
     for (const r of results) {
       const score = elonPlayerIds.has(r.player_id)
-        ? computeScore(r.placement, weight)
+        ? computeScore(r.placement, weight, tournament.total_participants)
         : 0
       resultScoreMap.set(r.id, score)
     }

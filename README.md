@@ -19,18 +19,20 @@
 
 ## How Scoring Works
 
-Players compete in tournaments — Elon-only weeklies and open regionals alike. The system uses a **weighted average placement** formula where harder competition produces lower (better) scores:
+Players compete in tournaments — Elon-only weeklies and open regionals alike. The system uses a **weighted average placement** formula where better finishes in harder, bigger fields produce lower (better) scores:
 
 ```
 weight  = elon_participants / total_participants
-score   = placement × weight
+score   = (placement / total_participants) × weight
 average = sum(scores) / tournaments_played
 ```
+
+Placement is normalized by field size so that finishing 14th of 30 (top half) correctly beats finishing 7th of 7 (dead last) — raw placement alone would reward the smaller, worse finish.
 
 | Tournament Type | Example Weight | Effect |
 |:---|:---:|:---|
 | Elon weekly (10/11) | `0.91` | Placements count a lot |
-| Mixed local (5/35) | `0.14` | Rewards showing up against tougher fields |
+| Mixed local (5/35) | `0.14` | Rewards beating non-Elon opponents |
 | Major regional (5/500) | `0.01` | Even mid-pack finishes are impressive |
 
 > **Lower average = higher rank.** A minimum tournament threshold (default 3) filters out one-time participants.

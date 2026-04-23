@@ -15,9 +15,14 @@ function computeWeight(elonParticipants: number, totalParticipants: number): num
   return elonParticipants / totalParticipants
 }
 
-function computeScore(placement: number, weight: number): number {
+function computeScore(
+  placement: number,
+  weight: number,
+  totalParticipants: number,
+): number {
   if (!Number.isFinite(placement) || !Number.isFinite(weight)) return 0
-  return placement * weight
+  if (!Number.isFinite(totalParticipants) || totalParticipants <= 0) return 0
+  return (placement / totalParticipants) * weight
 }
 
 // ── Test helpers ───────────────────────────────────────────────────────
@@ -102,47 +107,56 @@ function testComputeWeight() {
 function testComputeScore() {
   console.log('\n── computeScore: Normal values ──')
 
-  // 1st place at Elon weekly (weight 0.91)
-  assertEq(computeScore(1, 10 / 11), 1 * (10 / 11), '1st at weekly: 1 × 0.91 ≈ 0.909')
+  // 1st place at Elon weekly (10 Elon / 11 total)
+  assertEq(computeScore(1, 10 / 11, 11), (1 / 11) * (10 / 11), '1st at weekly: 1/11 × 10/11 ≈ 0.083')
 
-  // 1st place at regional (weight 0.01)
-  assertEq(computeScore(1, 5 / 500), 1 * (5 / 500), '1st at regional: 1 × 0.01 = 0.01')
+  // 1st place at regional (5 Elon / 500 total)
+  assertEq(computeScore(1, 5 / 500, 500), (1 / 500) * (5 / 500), '1st at regional: 1/500 × 5/500 = 0.00002')
 
-  // 5th at local (weight 0.14)
-  assertEq(computeScore(5, 5 / 35), 5 * (5 / 35), '5th at local: 5 × 0.143 ≈ 0.714')
+  // 5th at local (5 Elon / 35 total)
+  assertEq(computeScore(5, 5 / 35, 35), (5 / 35) * (5 / 35), '5th at local: 5/35 × 5/35 ≈ 0.020')
 
   // Last place at weekly
-  assertEq(computeScore(11, 10 / 11), 11 * (10 / 11), '11th at weekly: 11 × 0.91 = 10.0')
+  assertEq(computeScore(11, 10 / 11, 11), (11 / 11) * (10 / 11), '11th at weekly: 11/11 × 10/11 ≈ 0.909')
 
   // Score with 0 weight (no Elon players = 0 weight, score should be 0)
-  assertEq(computeScore(1, 0), 0, '0 weight → score 0')
+  assertEq(computeScore(1, 0, 10), 0, '0 weight → score 0')
 
   console.log('\n── computeScore: Edge cases ──')
 
-  assertEq(computeScore(0, 0.5), 0, 'Placement 0 → score 0')
-  assertEq(computeScore(NaN, 0.5), 0, 'NaN placement → 0')
-  assertEq(computeScore(1, NaN), 0, 'NaN weight → 0')
-  assertEq(computeScore(Infinity, 0.5), 0, 'Infinity placement → 0')
-  assertEq(computeScore(1, Infinity), 0, 'Infinity weight → 0')
-  assertEq(computeScore(-1, 0.5), -0.5, 'Negative placement → negative score (guarded upstream)')
+  assertEq(computeScore(0, 0.5, 10), 0, 'Placement 0 → score 0')
+  assertEq(computeScore(NaN, 0.5, 10), 0, 'NaN placement → 0')
+  assertEq(computeScore(1, NaN, 10), 0, 'NaN weight → 0')
+  assertEq(computeScore(Infinity, 0.5, 10), 0, 'Infinity placement → 0')
+  assertEq(computeScore(1, Infinity, 10), 0, 'Infinity weight → 0')
+  assertEq(computeScore(1, 0.5, 0), 0, 'Zero total → 0')
+  assertEq(computeScore(1, 0.5, -5), 0, 'Negative total → 0')
+  assertEq(computeScore(1, 0.5, NaN), 0, 'NaN total → 0')
+  assertEq(computeScore(-1, 0.5, 10), -0.05, 'Negative placement → negative score (guarded upstream)')
 
   console.log('\n── computeScore: Ranking fairness ──')
 
-  // Core property: better placement = lower score (at same weight)
-  const s1st = computeScore(1, 0.5)
-  const s5th = computeScore(5, 0.5)
-  const s10th = computeScore(10, 0.5)
-  assert(s1st < s5th && s5th < s10th, '1st < 5th < 10th at same weight')
+  // Core property: better placement = lower score (at same weight and field size)
+  const s1st = computeScore(1, 0.5, 20)
+  const s5th = computeScore(5, 0.5, 20)
+  const s10th = computeScore(10, 0.5, 20)
+  assert(s1st < s5th && s5th < s10th, '1st < 5th < 10th at same weight and field size')
 
-  // Core property: harder competition (lower weight) = lower score (at same placement)
-  const sEasy = computeScore(3, 0.9)   // Elon weekly
-  const sHard = computeScore(3, 0.1)   // Open regional
-  assert(sHard < sEasy, '3rd at regional < 3rd at weekly')
+  // Core property: harder competition (lower weight) = lower score at same percentile
+  const sEasy = computeScore(3, 0.9, 10)   // 30th percentile at Elon weekly
+  const sHard = computeScore(3, 0.1, 10)   // 30th percentile at open regional
+  assert(sHard < sEasy, '30th-percentile at regional < 30th-percentile at weekly')
 
   // The whole point: 5th at a major should beat 1st at a weekly
-  const weeklyFirst = computeScore(1, 10 / 11)    // ~0.91
-  const majorFifth = computeScore(5, 5 / 500)     // ~0.05
-  assert(majorFifth < weeklyFirst, '5th at major (0.05) < 1st at weekly (0.91)')
+  const weeklyFirst = computeScore(1, 10 / 11, 11)   // ~0.083
+  const majorFifth = computeScore(5, 5 / 500, 500)   // ~0.0001
+  assert(majorFifth < weeklyFirst, '5th at major < 1st at weekly')
+
+  // The regression this formula change fixed:
+  // 14th of 30 (top half) must beat 7th of 7 (dead last) when both are fully Elon
+  const midOfBig = computeScore(14, 1.0, 30)   // 14/30 × 1.0 ≈ 0.467
+  const lastOfSmall = computeScore(7, 1.0, 7)  // 7/7 × 1.0 = 1.000
+  assert(midOfBig < lastOfSmall, '14th of 30 (top half) < 7th of 7 (dead last)')
 }
 
 // ── Average score scenarios ───────────────────────────────────────────
@@ -154,9 +168,9 @@ function testAverageScenarios() {
   // Each weekly: 10 Elon / 11 total → weight ≈ 0.909
   const wWeekly = computeWeight(10, 11)
   const scoresA = [
-    computeScore(1, wWeekly),
-    computeScore(2, wWeekly),
-    computeScore(3, wWeekly),
+    computeScore(1, wWeekly, 11),
+    computeScore(2, wWeekly, 11),
+    computeScore(3, wWeekly, 11),
   ]
   const avgA = scoresA.reduce((s, v) => s + v, 0) / scoresA.length
   ok(`Player A (weeklies 1st/2nd/3rd): avg = ${avgA.toFixed(4)}`)
@@ -165,9 +179,9 @@ function testAverageScenarios() {
   // Each local: 5 Elon / 35 total → weight ≈ 0.143
   const wLocal = computeWeight(5, 35)
   const scoresB = [
-    computeScore(3, wLocal),
-    computeScore(5, wLocal),
-    computeScore(7, wLocal),
+    computeScore(3, wLocal, 35),
+    computeScore(5, wLocal, 35),
+    computeScore(7, wLocal, 35),
   ]
   const avgB = scoresB.reduce((s, v) => s + v, 0) / scoresB.length
   ok(`Player B (locals 3rd/5th/7th): avg = ${avgB.toFixed(4)}`)
@@ -178,14 +192,18 @@ function testAverageScenarios() {
   // Scenario: Player C mixes — 1 weekly (1st) + 1 regional (10th out of 200)
   const wRegional = computeWeight(5, 200)
   const scoresC = [
-    computeScore(1, wWeekly),
-    computeScore(10, wRegional),
+    computeScore(1, wWeekly, 11),
+    computeScore(10, wRegional, 200),
   ]
   const avgC = scoresC.reduce((s, v) => s + v, 0) / scoresC.length
   ok(`Player C (weekly 1st + regional 10th): avg = ${avgC.toFixed(4)}`)
 
   // Scenario: All zero-weight tournaments (no Elon students somehow)
-  const scoresD = [computeScore(1, 0), computeScore(2, 0), computeScore(3, 0)]
+  const scoresD = [
+    computeScore(1, 0, 10),
+    computeScore(2, 0, 10),
+    computeScore(3, 0, 10),
+  ]
   const avgD = scoresD.reduce((s, v) => s + v, 0) / scoresD.length
   assertEq(avgD, 0, 'Zero-weight tournaments → avg 0')
 }
